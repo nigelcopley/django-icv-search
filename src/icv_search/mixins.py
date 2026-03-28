@@ -201,8 +201,6 @@ class SearchableMixin:
         if not hit_ids:
             return queryset.none()
 
-        ordering = Case(
-            *[When(pk=pk_val, then=Value(pos)) for pos, pk_val in enumerate(hit_ids)]
-        )
+        ordering = Case(*[When(pk=pk_val, then=Value(pos)) for pos, pk_val in enumerate(hit_ids)])
 
         return queryset.filter(pk__in=hit_ids).order_by(ordering)
