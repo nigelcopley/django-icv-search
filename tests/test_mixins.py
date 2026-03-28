@@ -3,6 +3,7 @@
 import pytest
 
 from icv_search.mixins import SearchableMixin
+from icv_search.types import SearchResult
 
 
 class TestSearchableMixinClassAttributes:
@@ -93,6 +94,105 @@ class TestSearchableMixinGetSearchQueryset:
 
         qs = Article.get_search_queryset()
         assert isinstance(qs, QuerySet)
+
+
+class TestSearchableMixinHydrate:
+    """hydrate() returns a QuerySet from SearchResult in relevance order."""
+
+    @pytest.mark.django_db
+    def test_returns_queryset_in_search_order(self):
+        from search_testapp.models import Article
+
+        a1 = Article.objects.create(title="First")
+        a2 = Article.objects.create(title="Second")
+        a3 = Article.objects.create(title="Third")
+
+        result = SearchResult(
+            hits=[
+                {"id": str(a3.pk), "title": "Third"},
+                {"id": str(a1.pk), "title": "First"},
+                {"id": str(a2.pk), "title": "Second"},
+            ],
+            estimated_total_hits=3,
+        )
+
+        qs = Article.hydrate(result)
+        titles = list(qs.values_list("title", flat=True))
+        assert titles == ["Third", "First", "Second"]
+
+    @pytest.mark.django_db
+    def test_empty_hits_returns_empty_queryset(self):
+        from search_testapp.models import Article
+
+        Article.objects.create(title="Exists")
+        result = SearchResult(hits=[], estimated_total_hits=0)
+
+        qs = Article.hydrate(result)
+        assert qs.count() == 0
+
+    @pytest.mark.django_db
+    def test_custom_queryset_is_respected(self):
+        from search_testapp.models import Article
+
+        a1 = Article.objects.create(title="Published", is_published=True)
+        a2 = Article.objects.create(title="Draft", is_published=False)
+
+        result = SearchResult(
+            hits=[
+                {"id": str(a2.pk), "title": "Draft"},
+                {"id": str(a1.pk), "title": "Published"},
+            ],
+            estimated_total_hits=2,
+        )
+
+        qs = Article.hydrate(result, queryset=Article.objects.filter(is_published=True))
+        titles = list(qs.values_list("title", flat=True))
+        assert titles == ["Published"]
+
+    @pytest.mark.django_db
+    def test_missing_db_records_are_skipped(self):
+        from search_testapp.models import Article
+
+        a1 = Article.objects.create(title="Surviving")
+        fake_id = "00000000-0000-0000-0000-000000000099"
+
+        result = SearchResult(
+            hits=[
+                {"id": fake_id, "title": "Ghost"},
+                {"id": str(a1.pk), "title": "Surviving"},
+            ],
+            estimated_total_hits=2,
+        )
+
+        qs = Article.hydrate(result)
+        assert list(qs.values_list("title", flat=True)) == ["Surviving"]
+
+    @pytest.mark.django_db
+    def test_supports_select_related(self):
+        from search_testapp.models import Article
+
+        a1 = Article.objects.create(title="Chainable")
+        result = SearchResult(hits=[{"id": str(a1.pk)}], estimated_total_hits=1)
+
+        qs = Article.hydrate(result).only("title")
+        assert qs.first().title == "Chainable"
+
+    @pytest.mark.django_db
+    def test_hits_without_id_are_ignored(self):
+        from search_testapp.models import Article
+
+        a1 = Article.objects.create(title="Valid")
+        result = SearchResult(
+            hits=[
+                {"title": "No ID"},
+                {"id": str(a1.pk), "title": "Valid"},
+            ],
+            estimated_total_hits=2,
+        )
+
+        qs = Article.hydrate(result)
+        assert qs.count() == 1
+        assert qs.first().title == "Valid"
 
 
 class TestIndexModelInstancesValidation:

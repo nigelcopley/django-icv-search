@@ -167,3 +167,42 @@ class SearchableMixin:
             qs = qs.filter(deleted_at__isnull=True)
 
         return qs
+
+    @classmethod
+    def hydrate(cls, result, *, queryset=None):
+        """Return a Django QuerySet from a :class:`~icv_search.types.SearchResult`, preserving search relevance order.
+
+        Extracts document IDs from search hits, fetches the corresponding model
+        instances from the database, and orders them to match the search engine's
+        ranking using ``Case``/``When`` expressions.
+
+        The returned QuerySet supports all standard ORM operations::
+
+            result = search("products", "ergonomic chair")
+            qs = Product.hydrate(result).select_related("category")
+
+        Args:
+            result: A :class:`~icv_search.types.SearchResult` (or
+                :class:`~icv_search.types.MerchandisedSearchResult`).
+            queryset: Optional base QuerySet.  Defaults to
+                ``cls.get_search_queryset()``.  Pass a custom QuerySet to
+                include ``select_related``/``prefetch_related`` or extra filters.
+
+        Returns:
+            A QuerySet of model instances in search-relevance order.
+        """
+        from django.db.models import Case, Value, When
+
+        if queryset is None:
+            queryset = cls.get_search_queryset()
+
+        hit_ids = [hit.get("id") for hit in result.hits if hit.get("id") is not None]
+
+        if not hit_ids:
+            return queryset.none()
+
+        ordering = Case(
+            *[When(pk=pk_val, then=Value(pos)) for pos, pk_val in enumerate(hit_ids)]
+        )
+
+        return queryset.filter(pk__in=hit_ids).order_by(ordering)
