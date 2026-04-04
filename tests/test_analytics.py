@@ -113,6 +113,45 @@ class TestQueryLoggingDisabledByDefault:
 
 
 # ---------------------------------------------------------------------------
+# log_query parameter
+# ---------------------------------------------------------------------------
+
+
+class TestLogQueryParameter:
+    """log_query=False must suppress SearchQueryLog creation."""
+
+    @pytest.mark.django_db
+    def test_no_log_when_log_query_false(self, settings):
+        from icv_search.models.analytics import SearchQueryLog
+
+        settings.ICV_SEARCH_LOG_QUERIES = True
+        index = create_index("articles")
+        search(index, "hello", log_query=False)
+
+        assert SearchQueryLog.objects.count() == 0
+
+    @pytest.mark.django_db
+    def test_log_created_when_log_query_true(self, settings):
+        from icv_search.models.analytics import SearchQueryLog
+
+        settings.ICV_SEARCH_LOG_QUERIES = True
+        index = create_index("articles")
+        search(index, "hello", log_query=True)
+
+        assert SearchQueryLog.objects.count() == 1
+
+    @pytest.mark.django_db
+    def test_log_query_defaults_to_true(self, settings):
+        from icv_search.models.analytics import SearchQueryLog
+
+        settings.ICV_SEARCH_LOG_QUERIES = True
+        index = create_index("articles")
+        search(index, "hello")
+
+        assert SearchQueryLog.objects.count() == 1
+
+
+# ---------------------------------------------------------------------------
 # Zero-result detection
 # ---------------------------------------------------------------------------
 

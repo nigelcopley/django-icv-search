@@ -322,6 +322,35 @@ class TestBannerStep:
         assert len(result.banners) == 0
 
 
+class TestLogQueryParameter:
+    """log_query=False suppresses SearchQueryLog creation via merchandised_search."""
+
+    def test_no_log_when_log_query_false(self, products_index, settings):
+        from icv_search.models.analytics import SearchQueryLog
+
+        settings.ICV_SEARCH_LOG_QUERIES = True
+        merchandised_search("products", "red", log_query=False)
+
+        assert SearchQueryLog.objects.count() == 0
+
+    def test_log_created_when_log_query_true(self, products_index, settings):
+        from icv_search.models.analytics import SearchQueryLog
+
+        settings.ICV_SEARCH_LOG_QUERIES = True
+        merchandised_search("products", "red", log_query=True)
+
+        assert SearchQueryLog.objects.count() == 1
+
+    def test_no_log_when_merchandising_disabled_and_log_query_false(self, products_index, settings):
+        from icv_search.models.analytics import SearchQueryLog
+
+        settings.ICV_SEARCH_MERCHANDISING_ENABLED = False
+        settings.ICV_SEARCH_LOG_QUERIES = True
+        merchandised_search("products", "red", log_query=False)
+
+        assert SearchQueryLog.objects.count() == 0
+
+
 class TestFullPipeline:
     """End-to-end tests combining multiple pipeline steps."""
 

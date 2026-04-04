@@ -39,6 +39,7 @@ def search(
     *,
     user: Any = None,
     metadata: dict[str, Any] | None = None,
+    log_query: bool = True,
     **params: Any,
 ) -> SearchResult:
     """Execute a search query against a search index.
@@ -65,6 +66,10 @@ def search(
         user: Optional authenticated user instance for analytics logging.
         metadata: Optional dict of extra context stored on the query log
             (e.g. ``{"page": "homepage", "session": "abc"}``).
+        log_query: Whether to create a ``SearchQueryLog`` entry.  Pass
+            ``False`` for system-generated searches (category browse,
+            trending products, dynamic filter pages) that should not
+            pollute search analytics.  Defaults to ``True``.
         **params: Additional search parameters (limit, offset, filter, sort, etc.).
 
     Returns:
@@ -102,14 +107,15 @@ def search(
         len(result.hits),
     )
 
-    _maybe_log_query(
-        index=index,
-        query=query,
-        params=params,
-        result=result,
-        user=user,
-        metadata=metadata or {},
-    )
+    if log_query:
+        _maybe_log_query(
+            index=index,
+            query=query,
+            params=params,
+            result=result,
+            user=user,
+            metadata=metadata or {},
+        )
 
     return result
 

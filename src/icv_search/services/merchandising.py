@@ -20,6 +20,7 @@ def merchandised_search(
     *,
     user: Any = None,
     metadata: dict[str, Any] | None = None,
+    log_query: bool = True,
     skip_redirects: bool = False,
     skip_rewrites: bool = False,
     skip_preprocessing: bool = False,
@@ -55,6 +56,10 @@ def merchandised_search(
         tenant_id: Tenant identifier.
         user: Optional user for analytics logging.
         metadata: Optional metadata dict for query logging.
+        log_query: Whether to create a ``SearchQueryLog`` entry.  Pass
+            ``False`` for system-generated searches (category browse,
+            trending products, dynamic filter pages) that should not
+            pollute search analytics.  Defaults to ``True``.
         skip_redirects: Skip the redirect check step.
         skip_rewrites: Skip the rewrite step.
         skip_preprocessing: Skip the query preprocessing step.
@@ -85,7 +90,7 @@ def merchandised_search(
 
     # Step 1: Feature gate
     if not _is_merchandising_enabled():
-        result = search(name_or_index, query, tenant_id, user=user, metadata=metadata, **params)
+        result = search(name_or_index, query, tenant_id, user=user, metadata=metadata, log_query=log_query, **params)
         return MerchandisedSearchResult.from_search_result(
             result,
             original_query=query,
@@ -212,7 +217,7 @@ def merchandised_search(
                 params = {**params, "sort": sort}
 
     # Step 5: Execute search
-    result = search(name_or_index, search_query, tenant_id, user=user, metadata=metadata, **params)
+    result = search(name_or_index, search_query, tenant_id, user=user, metadata=metadata, log_query=log_query, **params)
 
     # Step 6: Apply pins
     if not skip_pins:

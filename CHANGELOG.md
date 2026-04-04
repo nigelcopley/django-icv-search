@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-04
+
+### Added
+
+- `log_query` parameter on `search()` and `merchandised_search()` (default `True`).
+  Pass `False` for system-generated searches (category browse, trending products,
+  dynamic filter pages) to keep programmatic queries out of search analytics.
+
 ## [0.8.0] - 2026-03-27
 
 ### Added
