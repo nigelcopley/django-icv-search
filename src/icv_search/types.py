@@ -54,10 +54,15 @@ class SearchResult:
     raw: dict[str, Any] = field(default_factory=dict)
 
     # Internal keys stripped from plain hits.
-    _INTERNAL_HIT_KEYS = frozenset({
-        "_formatted", "_rankingScore", "_rankingScoreDetails",
-        "_matchesPosition", "_vectors",
-    })
+    _INTERNAL_HIT_KEYS = frozenset(
+        {
+            "_formatted",
+            "_rankingScore",
+            "_rankingScoreDetails",
+            "_matchesPosition",
+            "_vectors",
+        }
+    )
 
     @classmethod
     def from_engine(cls, data: dict[str, Any]) -> SearchResult:
@@ -103,14 +108,12 @@ class SearchResult:
 
         # Extract ranking score details (per-rule breakdown).
         ranking_score_details: list[dict[str, Any] | None] = [
-            hit.get("_rankingScoreDetails") for hit in raw_hits
-            if "_rankingScoreDetails" in hit
+            hit.get("_rankingScoreDetails") for hit in raw_hits if "_rankingScoreDetails" in hit
         ]
 
         # Extract match positions.
         matches_position: list[dict[str, Any] | None] = [
-            hit.get("_matchesPosition") for hit in raw_hits
-            if "_matchesPosition" in hit
+            hit.get("_matchesPosition") for hit in raw_hits if "_matchesPosition" in hit
         ]
 
         # Strip internal Meilisearch keys from the plain hits to keep them clean.

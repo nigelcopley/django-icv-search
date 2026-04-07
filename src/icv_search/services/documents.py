@@ -139,9 +139,7 @@ def delete_documents_by_filter(
     log = IndexSyncLog.objects.create(index=index, action="documents_deleted", status="pending")
 
     try:
-        raw_result = backend.delete_documents_by_filter(
-            uid=index.engine_uid, filter_expr=filter_expr
-        )
+        raw_result = backend.delete_documents_by_filter(uid=index.engine_uid, filter_expr=filter_expr)
         task_result = TaskResult.from_engine(raw_result)
         log.task_uid = task_result.task_uid
         log.mark_complete(status="success", detail=f"Deleted documents by filter: {filter_expr}")

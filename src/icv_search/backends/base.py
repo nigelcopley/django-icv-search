@@ -58,9 +58,7 @@ class BaseSearchBackend(ABC):
         Returns:
             Engine task info dict.
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support delete_documents_by_filter()."
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} does not support delete_documents_by_filter().")
 
     @abstractmethod
     def clear_documents(self, uid: str) -> dict[str, Any]:

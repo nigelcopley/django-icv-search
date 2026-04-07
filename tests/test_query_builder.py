@@ -304,9 +304,7 @@ class TestBuildParams:
         assert params["geo_radius"] == 5000
 
     def test_geo_bbox_included(self):
-        params = SearchQuery("products").geo_bbox(
-            top_right=(52.0, 0.5), bottom_left=(51.0, -0.5)
-        )._build_params()
+        params = SearchQuery("products").geo_bbox(top_right=(52.0, 0.5), bottom_left=(51.0, -0.5))._build_params()
         assert params["geo_bbox"] == ((52.0, 0.5), (51.0, -0.5))
 
     def test_geo_polygon_included(self):

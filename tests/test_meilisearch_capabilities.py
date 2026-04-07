@@ -12,7 +12,6 @@ from unittest.mock import Mock, patch
 import pytest
 
 from icv_search.backends import reset_search_backend
-from icv_search.backends.base import BaseSearchBackend
 from icv_search.backends.dummy import DummyBackend
 from icv_search.backends.meilisearch import MeilisearchBackend
 from icv_search.query import SearchQuery
@@ -41,11 +40,14 @@ def use_dummy_backend(settings):
 def products_index(db):
     """Create a products search index with sample documents."""
     index = create_index("products", primary_key="id")
-    index_documents("products", [
-        {"id": "1", "name": "Running Shoes", "brand": "Nike", "price": 120},
-        {"id": "2", "name": "Walking Shoes", "brand": "Adidas", "price": 90},
-        {"id": "3", "name": "Running Socks", "brand": "Nike", "price": 15},
-    ])
+    index_documents(
+        "products",
+        [
+            {"id": "1", "name": "Running Shoes", "brand": "Nike", "price": 120},
+            {"id": "2", "name": "Walking Shoes", "brand": "Adidas", "price": 90},
+            {"id": "3", "name": "Running Socks", "brand": "Nike", "price": 15},
+        ],
+    )
     return index
 
 
@@ -188,15 +190,11 @@ class TestMeilisearchSearchParams:
             return call_kwargs["json"]
 
     def test_attributes_to_retrieve(self, meilisearch_backend):
-        body = self._capture_body(
-            meilisearch_backend, attributes_to_retrieve=["name", "price"]
-        )
+        body = self._capture_body(meilisearch_backend, attributes_to_retrieve=["name", "price"])
         assert body["attributesToRetrieve"] == ["name", "price"]
 
     def test_attributes_to_search_on(self, meilisearch_backend):
-        body = self._capture_body(
-            meilisearch_backend, attributes_to_search_on=["name"]
-        )
+        body = self._capture_body(meilisearch_backend, attributes_to_search_on=["name"])
         assert body["attributesToSearchOn"] == ["name"]
 
     def test_crop_fields(self, meilisearch_backend):
@@ -211,29 +209,21 @@ class TestMeilisearchSearchParams:
         assert body["cropMarker"] == "..."
 
     def test_crop_fields_without_options(self, meilisearch_backend):
-        body = self._capture_body(
-            meilisearch_backend, crop_fields=["description"]
-        )
+        body = self._capture_body(meilisearch_backend, crop_fields=["description"])
         assert body["attributesToCrop"] == ["description"]
         assert "cropLength" not in body
         assert "cropMarker" not in body
 
     def test_show_ranking_score_details(self, meilisearch_backend):
-        body = self._capture_body(
-            meilisearch_backend, show_ranking_score_details=True
-        )
+        body = self._capture_body(meilisearch_backend, show_ranking_score_details=True)
         assert body["showRankingScoreDetails"] is True
 
     def test_show_matches_position(self, meilisearch_backend):
-        body = self._capture_body(
-            meilisearch_backend, show_matches_position=True
-        )
+        body = self._capture_body(meilisearch_backend, show_matches_position=True)
         assert body["showMatchesPosition"] is True
 
     def test_ranking_score_threshold(self, meilisearch_backend):
-        body = self._capture_body(
-            meilisearch_backend, ranking_score_threshold=0.8
-        )
+        body = self._capture_body(meilisearch_backend, ranking_score_threshold=0.8)
         assert body["rankingScoreThreshold"] == 0.8
 
     def test_distinct(self, meilisearch_backend):
@@ -258,9 +248,7 @@ class TestMeilisearchSearchParams:
         assert body["retrieveVectors"] is True
 
     def test_page_and_hits_per_page(self, meilisearch_backend):
-        body = self._capture_body(
-            meilisearch_backend, page=2, hits_per_page=10
-        )
+        body = self._capture_body(meilisearch_backend, page=2, hits_per_page=10)
         assert body["page"] == 2
         assert body["hitsPerPage"] == 10
 
@@ -330,12 +318,8 @@ class TestMeilisearchDeleteByFilter:
         response.status_code = 200
         response.json.return_value = {"taskUid": 42, "status": "enqueued"}
 
-        with patch.object(
-            meilisearch_backend._client, "request", return_value=response
-        ) as mock_req:
-            meilisearch_backend.delete_documents_by_filter(
-                "products", "brand = 'Nike'"
-            )
+        with patch.object(meilisearch_backend._client, "request", return_value=response) as mock_req:
+            meilisearch_backend.delete_documents_by_filter("products", "brand = 'Nike'")
             _, call_kwargs = mock_req.call_args
             assert call_kwargs["json"] == {"filter": "brand = 'Nike'"}
             assert "/documents/delete" in mock_req.call_args[0][1]
@@ -359,11 +343,7 @@ class TestSearchQueryNewMethods:
     """SearchQuery builder exposes all new Meilisearch params."""
 
     def test_crop(self):
-        params = (
-            SearchQuery("products")
-            .crop("description", length=20, marker="...")
-            ._build_params()
-        )
+        params = SearchQuery("products").crop("description", length=20, marker="...")._build_params()
         assert params["crop_fields"] == ["description"]
         assert params["crop_length"] == 20
         assert params["crop_marker"] == "..."
@@ -375,19 +355,11 @@ class TestSearchQueryNewMethods:
         assert "crop_marker" not in params
 
     def test_attributes_to_retrieve(self):
-        params = (
-            SearchQuery("products")
-            .attributes_to_retrieve("name", "price")
-            ._build_params()
-        )
+        params = SearchQuery("products").attributes_to_retrieve("name", "price")._build_params()
         assert params["attributes_to_retrieve"] == ["name", "price"]
 
     def test_attributes_to_search_on(self):
-        params = (
-            SearchQuery("products")
-            .attributes_to_search_on("name")
-            ._build_params()
-        )
+        params = SearchQuery("products").attributes_to_search_on("name")._build_params()
         assert params["attributes_to_search_on"] == ["name"]
 
     def test_distinct(self):
@@ -395,11 +367,7 @@ class TestSearchQueryNewMethods:
         assert params["distinct"] == "brand"
 
     def test_hybrid(self):
-        params = (
-            SearchQuery("products")
-            .hybrid(semantic_ratio=0.7, embedder="my-embedder")
-            ._build_params()
-        )
+        params = SearchQuery("products").hybrid(semantic_ratio=0.7, embedder="my-embedder")._build_params()
         assert params["hybrid"]["semanticRatio"] == 0.7
         assert params["hybrid"]["embedder"] == "my-embedder"
 
@@ -414,37 +382,23 @@ class TestSearchQueryNewMethods:
         assert params["vector"] == vec
 
     def test_retrieve_vectors(self):
-        params = (
-            SearchQuery("products").retrieve_vectors()._build_params()
-        )
+        params = SearchQuery("products").retrieve_vectors()._build_params()
         assert params["retrieve_vectors"] is True
 
     def test_ranking_score_threshold(self):
-        params = (
-            SearchQuery("products")
-            .ranking_score_threshold(0.5)
-            ._build_params()
-        )
+        params = SearchQuery("products").ranking_score_threshold(0.5)._build_params()
         assert params["ranking_score_threshold"] == 0.5
 
     def test_show_matches_position(self):
-        params = (
-            SearchQuery("products").show_matches_position()._build_params()
-        )
+        params = SearchQuery("products").show_matches_position()._build_params()
         assert params["show_matches_position"] is True
 
     def test_show_ranking_score_details(self):
-        params = (
-            SearchQuery("products")
-            .show_ranking_score_details()
-            ._build_params()
-        )
+        params = SearchQuery("products").show_ranking_score_details()._build_params()
         assert params["show_ranking_score_details"] is True
 
     def test_locales(self):
-        params = (
-            SearchQuery("products").locales("eng", "jpn")._build_params()
-        )
+        params = SearchQuery("products").locales("eng", "jpn")._build_params()
         assert params["locales"] == ["eng", "jpn"]
 
     def test_page_based_pagination(self):
@@ -549,10 +503,13 @@ class TestIndexSettingsServices:
         )
 
         create_index("products")
-        update_faceting_settings("products", {
-            "maxValuesPerFacet": 200,
-            "sortFacetValuesBy": {"brand": "count"},
-        })
+        update_faceting_settings(
+            "products",
+            {
+                "maxValuesPerFacet": 200,
+                "sortFacetValuesBy": {"brand": "count"},
+            },
+        )
         result = get_faceting_settings("products")
         assert result["maxValuesPerFacet"] == 200
 
@@ -647,12 +604,15 @@ class TestIndexSettingsServices:
         )
 
         create_index("products")
-        update_embedders("products", {
-            "default": {
-                "source": "userProvided",
-                "dimensions": 384,
-            }
-        })
+        update_embedders(
+            "products",
+            {
+                "default": {
+                    "source": "userProvided",
+                    "dimensions": 384,
+                }
+            },
+        )
         result = get_embedders("products")
         assert "default" in result
         assert result["default"]["dimensions"] == 384
@@ -702,28 +662,27 @@ class TestDeleteDocumentsByFilterService:
 
     def test_with_meilisearch_backend(self):
         """Verify the Meilisearch backend method is called correctly."""
-        backend = MeilisearchBackend(
-            url="http://localhost:7700", api_key="test-key"
-        )
+        backend = MeilisearchBackend(url="http://localhost:7700", api_key="test-key")
         response = Mock()
         response.status_code = 200
         response.json.return_value = {"taskUid": 99, "status": "enqueued"}
 
         with patch.object(backend._client, "request", return_value=response):
-            result = backend.delete_documents_by_filter(
-                "products", "brand = 'Nike'"
-            )
+            result = backend.delete_documents_by_filter("products", "brand = 'Nike'")
             assert result["taskUid"] == 99
 
     def test_service_translates_dict_filter(self, db):
         """When a dict filter is passed, it's translated to engine format."""
         from icv_search.services.documents import delete_documents_by_filter
 
-        index = create_index("products")
-        index_documents("products", [
-            {"id": "1", "brand": "Nike"},
-            {"id": "2", "brand": "Adidas"},
-        ])
+        create_index("products")
+        index_documents(
+            "products",
+            [
+                {"id": "1", "brand": "Nike"},
+                {"id": "2", "brand": "Adidas"},
+            ],
+        )
 
         # DummyBackend raises NotImplementedError for delete_documents_by_filter
         with pytest.raises(NotImplementedError):

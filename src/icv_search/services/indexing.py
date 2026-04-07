@@ -492,9 +492,7 @@ def update_pagination_settings(
     Controls the hard cap on the result window. Higher values allow deeper
     pagination but increase memory usage.
     """
-    return update_index_settings(
-        name_or_index, {"pagination": {"maxTotalHits": max_total_hits}}, tenant_id
-    )
+    return update_index_settings(name_or_index, {"pagination": {"maxTotalHits": max_total_hits}}, tenant_id)
 
 
 def get_faceting_settings(
