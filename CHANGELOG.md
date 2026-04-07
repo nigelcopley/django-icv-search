@@ -4,7 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.11.0] - 2026-04-07
+## [1.0.0b1] - 2026-04-07
+
+First beta towards 1.0 — full Meilisearch capability parity.
 
 ### Added
 
