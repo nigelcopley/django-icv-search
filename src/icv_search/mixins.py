@@ -76,6 +76,7 @@ class SearchableMixin:
     search_fields: list[str] = []
     search_filterable_fields: list[str] = []
     search_sortable_fields: list[str] = []
+    search_displayed_fields: list[str] = []
     search_exclude_soft_deleted: bool = True
 
     # Geo search configuration.

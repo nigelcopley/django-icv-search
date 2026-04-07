@@ -47,11 +47,26 @@ class SearchQuery:
         self._sort: list[str] = []
         self._facets: list[str] = []
         self._highlight: dict[str, Any] = {}
+        self._crop: dict[str, Any] = {}
         self._geo: dict[str, Any] = {}
+        self._geo_bbox: tuple | None = None
+        self._geo_polygon: list | None = None
         self._limit: int | None = None
         self._offset: int | None = None
+        self._page: int | None = None
+        self._hits_per_page: int | None = None
         self._with_ranking_scores: bool = False
+        self._with_ranking_score_details: bool = False
+        self._with_matches_position: bool = False
         self._matching_strategy: str | None = None
+        self._attributes_to_retrieve: list[str] | None = None
+        self._attributes_to_search_on: list[str] | None = None
+        self._ranking_score_threshold: float | None = None
+        self._distinct: str | None = None
+        self._hybrid: dict[str, Any] | None = None
+        self._vector: list[float] | None = None
+        self._retrieve_vectors: bool = False
+        self._locales: list[str] | None = None
         self._tenant: str = ""
         self._user: Any = None
         self._metadata: dict[str, Any] = {}
@@ -154,6 +169,187 @@ class SearchQuery:
             self._highlight["post_tag"] = post_tag
         return self
 
+    # ----------------------------------------------------------------- crop
+
+    def crop(
+        self,
+        *fields: str,
+        length: int | None = None,
+        marker: str | None = None,
+    ) -> SearchQuery:
+        """Configure result cropping/snippets.
+
+        Cropped excerpts appear in ``formatted_hits``.
+
+        Args:
+            *fields: Attribute names to crop.
+            length: Words per cropped excerpt.
+            marker: Boundary marker (e.g. ``"..."``).
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._crop = {"fields": list(fields)}
+        if length is not None:
+            self._crop["length"] = length
+        if marker is not None:
+            self._crop["marker"] = marker
+        return self
+
+    # ------------------------------------------------ attributes_to_retrieve
+
+    def attributes_to_retrieve(self, *fields: str) -> SearchQuery:
+        """Restrict which fields are returned in search results.
+
+        Args:
+            *fields: Field names to include.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._attributes_to_retrieve = list(fields)
+        return self
+
+    # ----------------------------------------------- attributes_to_search_on
+
+    def attributes_to_search_on(self, *fields: str) -> SearchQuery:
+        """Restrict which fields are searched at query time.
+
+        Args:
+            *fields: Searchable field names to limit the query to.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._attributes_to_search_on = list(fields)
+        return self
+
+    # ----------------------------------------------------------- distinct
+
+    def distinct(self, field: str) -> SearchQuery:
+        """Set query-time deduplication field.
+
+        Only one document per distinct field value appears in results.
+
+        Args:
+            field: Field name to deduplicate on.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._distinct = field
+        return self
+
+    # ------------------------------------------------------------ hybrid
+
+    def hybrid(
+        self,
+        semantic_ratio: float = 0.5,
+        embedder: str = "default",
+    ) -> SearchQuery:
+        """Enable hybrid (keyword + semantic) search.
+
+        Args:
+            semantic_ratio: Balance between keyword (0.0) and semantic (1.0).
+            embedder: Name of the configured embedder to use.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._hybrid = {"semanticRatio": semantic_ratio, "embedder": embedder}
+        return self
+
+    # ------------------------------------------------------------ vector
+
+    def vector(self, embedding: list[float]) -> SearchQuery:
+        """Pass a raw vector as the query (pure semantic search).
+
+        Args:
+            embedding: Float array matching the embedder dimensions.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._vector = embedding
+        return self
+
+    # ------------------------------------------------------- retrieve_vectors
+
+    def retrieve_vectors(self) -> SearchQuery:
+        """Include ``_vectors`` in each hit of the response.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._retrieve_vectors = True
+        return self
+
+    # ------------------------------------------- ranking_score_threshold
+
+    def ranking_score_threshold(self, threshold: float) -> SearchQuery:
+        """Exclude results below this relevance score (0–1).
+
+        Args:
+            threshold: Minimum ranking score.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._ranking_score_threshold = threshold
+        return self
+
+    # ------------------------------------------- show_matches_position
+
+    def show_matches_position(self) -> SearchQuery:
+        """Request byte-level offsets of matched terms in each hit.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._with_matches_position = True
+        return self
+
+    # ---------------------------------------- show_ranking_score_details
+
+    def show_ranking_score_details(self) -> SearchQuery:
+        """Request per-rule ranking score breakdown for each hit.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._with_ranking_score_details = True
+        return self
+
+    # ----------------------------------------------------------- locales
+
+    def locales(self, *codes: str) -> SearchQuery:
+        """Set ISO-639 language codes for the query.
+
+        Args:
+            *codes: Language codes (e.g. ``"eng"``, ``"jpn"``).
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._locales = list(codes)
+        return self
+
+    # ------------------------------------------------------------- page
+
+    def page(self, number: int, per_page: int = 20) -> SearchQuery:
+        """Use page-based pagination instead of offset-based.
+
+        Args:
+            number: Page number (1-indexed).
+            per_page: Results per page.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._page = number
+        self._hits_per_page = per_page
+        return self
+
     # --------------------------------------------------------------- geo_near
 
     def geo_near(
@@ -179,6 +375,39 @@ class SearchQuery:
         self._geo = {"lat": lat, "lng": lng, "sort": sort}
         if radius is not None:
             self._geo["radius"] = radius
+        return self
+
+    # ------------------------------------------------------------ geo_bbox
+
+    def geo_bbox(
+        self,
+        top_right: tuple[float, float],
+        bottom_left: tuple[float, float],
+    ) -> SearchQuery:
+        """Filter results within a geographic bounding box.
+
+        Args:
+            top_right: ``(lat, lng)`` of the top-right corner.
+            bottom_left: ``(lat, lng)`` of the bottom-left corner.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._geo_bbox = (top_right, bottom_left)
+        return self
+
+    # --------------------------------------------------------- geo_polygon
+
+    def geo_polygon(self, vertices: list[tuple[float, float]]) -> SearchQuery:
+        """Filter results within a geographic polygon.
+
+        Args:
+            vertices: List of ``(lat, lng)`` vertices defining the polygon.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._geo_polygon = vertices
         return self
 
     # --------------------------------------------------------------- paging
@@ -300,8 +529,25 @@ class SearchQuery:
             if "post_tag" in self._highlight:
                 params["highlight_post_tag"] = self._highlight["post_tag"]
 
+        if self._crop:
+            params["crop_fields"] = self._crop["fields"]
+            if "length" in self._crop:
+                params["crop_length"] = self._crop["length"]
+            if "marker" in self._crop:
+                params["crop_marker"] = self._crop["marker"]
+
         if self._geo:
-            params["_geo"] = dict(self._geo)
+            params["geo_point"] = (self._geo["lat"], self._geo["lng"])
+            if "radius" in self._geo:
+                params["geo_radius"] = self._geo["radius"]
+            if self._geo.get("sort"):
+                params["geo_sort"] = self._geo["sort"]
+
+        if self._geo_bbox is not None:
+            params["geo_bbox"] = self._geo_bbox
+
+        if self._geo_polygon is not None:
+            params["geo_polygon"] = self._geo_polygon
 
         if self._limit is not None:
             params["limit"] = self._limit
@@ -309,11 +555,47 @@ class SearchQuery:
         if self._offset is not None:
             params["offset"] = self._offset
 
+        if self._page is not None:
+            params["page"] = self._page
+
+        if self._hits_per_page is not None:
+            params["hits_per_page"] = self._hits_per_page
+
         if self._with_ranking_scores:
             params["show_ranking_score"] = True
 
+        if self._with_ranking_score_details:
+            params["show_ranking_score_details"] = True
+
+        if self._with_matches_position:
+            params["show_matches_position"] = True
+
         if self._matching_strategy is not None:
             params["matching_strategy"] = self._matching_strategy
+
+        if self._attributes_to_retrieve is not None:
+            params["attributes_to_retrieve"] = self._attributes_to_retrieve
+
+        if self._attributes_to_search_on is not None:
+            params["attributes_to_search_on"] = self._attributes_to_search_on
+
+        if self._ranking_score_threshold is not None:
+            params["ranking_score_threshold"] = self._ranking_score_threshold
+
+        if self._distinct is not None:
+            params["distinct"] = self._distinct
+
+        if self._hybrid is not None:
+            params["hybrid"] = self._hybrid
+
+        if self._vector is not None:
+            params["vector"] = self._vector
+
+        if self._retrieve_vectors:
+            params["retrieve_vectors"] = True
+
+        if self._locales is not None:
+            params["locales"] = self._locales
 
         return params
 

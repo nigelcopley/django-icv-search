@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-07
+
+### Added
+
+- Full Meilisearch capability coverage — hybrid/semantic search, cropping,
+  page-based pagination, geo bounding box/polygon, and 20+ new search params
+- **Search parameters**: `attributes_to_retrieve`, `attributes_to_search_on`,
+  `crop_fields`/`crop_length`/`crop_marker`, `show_ranking_score_details`,
+  `show_matches_position`, `ranking_score_threshold`, `distinct` (query-time),
+  `hybrid`/`vector`/`retrieve_vectors` (semantic search), `page`/`hits_per_page`,
+  `locales`, `geo_bbox`, `geo_polygon`
+- **Index settings services** (30+ functions): `displayedAttributes`,
+  `distinctAttribute`, `pagination.maxTotalHits`, `faceting` (sortFacetValuesBy,
+  maxValuesPerFacet), `proximityPrecision`, `searchCutoffMs`, `dictionary`,
+  `separatorTokens`/`nonSeparatorTokens`, `prefixSearch`, `embedders`,
+  `localizedAttributes`, `rankingRules` — each with get/update/reset
+- `delete_documents_by_filter()` — filter-based document deletion (backend + service)
+- `SearchQuery` builder: 14 new chainable methods (`.crop()`, `.hybrid()`,
+  `.vector()`, `.distinct()`, `.attributes_to_retrieve()`, `.attributes_to_search_on()`,
+  `.ranking_score_threshold()`, `.show_matches_position()`, `.show_ranking_score_details()`,
+  `.retrieve_vectors()`, `.locales()`, `.page()`, `.geo_bbox()`, `.geo_polygon()`)
+- `SearchResult` new fields: `ranking_score_details`, `matches_position`,
+  `page`, `hits_per_page`, `total_hits`, `total_pages`
+- `SearchableMixin.search_displayed_fields` class attribute
+- 62 new tests covering all additions
+
+### Fixed
+
+- `SearchQuery.geo_near()` params now correctly translate to backend-recognised
+  `geo_point`/`geo_radius`/`geo_sort` keys (previously emitted unused `_geo` key)
+
 ## [0.10.0] - 2026-04-04
 
 ### Added

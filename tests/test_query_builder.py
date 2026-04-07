@@ -295,8 +295,24 @@ class TestBuildParams:
 
     def test_geo_included(self):
         params = SearchQuery("products").geo_near(lat=51.5, lng=-0.12)._build_params()
-        assert "_geo" in params
-        assert params["_geo"]["lat"] == 51.5
+        assert params["geo_point"] == (51.5, -0.12)
+        assert params["geo_sort"] == "asc"
+
+    def test_geo_with_radius_included(self):
+        params = SearchQuery("products").geo_near(lat=51.5, lng=-0.12, radius=5000)._build_params()
+        assert params["geo_point"] == (51.5, -0.12)
+        assert params["geo_radius"] == 5000
+
+    def test_geo_bbox_included(self):
+        params = SearchQuery("products").geo_bbox(
+            top_right=(52.0, 0.5), bottom_left=(51.0, -0.5)
+        )._build_params()
+        assert params["geo_bbox"] == ((52.0, 0.5), (51.0, -0.5))
+
+    def test_geo_polygon_included(self):
+        vertices = [(51.5, -0.12), (52.0, 0.5), (51.0, 0.5)]
+        params = SearchQuery("products").geo_polygon(vertices)._build_params()
+        assert params["geo_polygon"] == vertices
 
     def test_highlight_fields_included(self):
         params = SearchQuery("products").highlight("name")._build_params()

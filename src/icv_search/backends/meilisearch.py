@@ -121,6 +121,18 @@ class MeilisearchBackend(BaseSearchBackend):
         """Remove all documents using Meilisearch's DELETE /indexes/{uid}/documents."""
         return self._request("DELETE", f"/indexes/{uid}/documents")
 
+    def delete_documents_by_filter(self, uid: str, filter_expr: str) -> dict[str, Any]:
+        """Remove documents matching a filter expression.
+
+        Uses ``POST /indexes/{uid}/documents/delete`` with a JSON body
+        containing the filter.  Requires Meilisearch v1.2+.
+        """
+        return self._request(
+            "POST",
+            f"/indexes/{uid}/documents/delete",
+            json={"filter": filter_expr},
+        )
+
     def search(self, uid: str, query: str, **params: Any) -> dict[str, Any]:
         """Execute a search query against a Meilisearch index.
 
@@ -132,18 +144,55 @@ class MeilisearchBackend(BaseSearchBackend):
           Defaults to ``<mark>``.
         - ``highlight_post_tag`` (str): Closing tag for highlighted terms.
           Defaults to ``</mark>``.
+        - ``crop_fields`` (list[str]): Fields to crop/snippet. Maps to
+          ``attributesToCrop``.
+        - ``crop_length`` (int): Words per cropped excerpt. Maps to
+          ``cropLength``.
+        - ``crop_marker`` (str): Boundary marker for crops. Maps to
+          ``cropMarker``.
         - ``show_ranking_score`` (bool): When ``True``, include each hit's
           relevance score as ``_rankingScore`` (Meilisearch v1.3+).  Maps to
           ``showRankingScore``.
+        - ``show_ranking_score_details`` (bool): When ``True``, include
+          per-rule score breakdown as ``_rankingScoreDetails``.  Maps to
+          ``showRankingScoreDetails``.
+        - ``show_matches_position`` (bool): When ``True``, return byte
+          offsets of matched terms. Maps to ``showMatchesPosition``.
         - ``matching_strategy`` (str): Controls how query terms are matched.
           One of ``"all"``, ``"last"``, or ``"frequency"``.  Maps to
           Meilisearch's ``matchingStrategy`` parameter.
+        - ``attributes_to_retrieve`` (list[str]): Restrict returned fields.
+          Maps to ``attributesToRetrieve``.
+        - ``attributes_to_search_on`` (list[str]): Restrict search scope at
+          query time. Maps to ``attributesToSearchOn``.
+        - ``ranking_score_threshold`` (float): Exclude results below this
+          score (0–1). Maps to ``rankingScoreThreshold``.
+        - ``distinct`` (str): Query-time deduplication field. Maps to
+          ``distinct``.
+        - ``hybrid`` (dict): Hybrid/semantic search options.  Pass
+          ``{"semanticRatio": 0.5, "embedder": "default"}`` to blend
+          keyword and vector results. Maps to ``hybrid``.
+        - ``vector`` (list[float]): Raw float array as query vector. Maps
+          to ``vector``.
+        - ``retrieve_vectors`` (bool): Return ``_vectors`` on each hit.
+          Maps to ``retrieveVectors``.
+        - ``page`` (int): Page number (1-indexed, use with ``hits_per_page``).
+          Maps to ``page``.
+        - ``hits_per_page`` (int): Documents per page. Maps to
+          ``hitsPerPage``.
+        - ``locales`` (list[str]): ISO-639 language codes for query. Maps
+          to ``locales``.
         - ``geo_point`` (tuple[float, float]): ``(lat, lng)`` origin for
           geo-distance filtering and sorting.  Must be accompanied by
-          ``geo_radius`` and/or ``geo_sort``.
+          ``geo_radius``, ``geo_bbox``, ``geo_polygon``, and/or ``geo_sort``.
         - ``geo_radius`` (int | None): Radius in metres.  When combined with
           ``geo_point`` a ``_geoRadius`` filter is appended to the existing
           filter expression.
+        - ``geo_bbox`` (tuple[tuple[float,float],tuple[float,float]]): Bounding
+          box as ``((top_right_lat, top_right_lng), (bottom_left_lat, bottom_left_lng))``.
+          Appends a ``_geoBoundingBox`` filter.
+        - ``geo_polygon`` (list[tuple[float, float]]): Polygon vertices as
+          ``[(lat, lng), ...]``.  Appends a ``_geoPolygon`` filter.
         - ``geo_sort`` (str): ``"asc"`` or ``"desc"``.  When combined with
           ``geo_point`` a ``_geoPoint`` sort expression is prepended to the
           sort list so that results are ordered by distance from the point.
@@ -153,6 +202,8 @@ class MeilisearchBackend(BaseSearchBackend):
         # Extract geo params before any other processing.
         geo_point: tuple[float, float] | None = params.pop("geo_point", None)
         geo_radius: int | None = params.pop("geo_radius", None)
+        geo_bbox: tuple | None = params.pop("geo_bbox", None)
+        geo_polygon: list | None = params.pop("geo_polygon", None)
         geo_sort: str | None = params.pop("geo_sort", None)
 
         # Translate Django-native filter dict to Meilisearch filter string
@@ -163,15 +214,28 @@ class MeilisearchBackend(BaseSearchBackend):
         if "sort" in params and isinstance(params["sort"], list):
             params = {**params, "sort": translate_sort_to_meilisearch(params["sort"])}
 
-        # Append geo radius filter when both geo_point and geo_radius are given.
+        # Collect geo filter expressions.
+        geo_filters: list[str] = []
+
         if geo_point is not None and geo_radius is not None:
             lat, lng = geo_point
-            geo_filter = f"_geoRadius({lat}, {lng}, {geo_radius})"
+            geo_filters.append(f"_geoRadius({lat}, {lng}, {geo_radius})")
+
+        if geo_bbox is not None:
+            (tr_lat, tr_lng), (bl_lat, bl_lng) = geo_bbox
+            geo_filters.append(f"_geoBoundingBox([{tr_lat}, {tr_lng}], [{bl_lat}, {bl_lng}])")
+
+        if geo_polygon is not None:
+            vertices = ", ".join(f"[{lat}, {lng}]" for lat, lng in geo_polygon)
+            geo_filters.append(f"_geoPolygon({vertices})")
+
+        if geo_filters:
             existing_filter: str = params.pop("filter", "") or ""
+            combined_geo = " AND ".join(geo_filters)
             if existing_filter:
-                params["filter"] = f"{existing_filter} AND {geo_filter}"
+                params["filter"] = f"{existing_filter} AND {combined_geo}"
             else:
-                params["filter"] = geo_filter
+                params["filter"] = combined_geo
 
         # Prepend geo distance sort when both geo_point and geo_sort are given.
         if geo_point is not None and geo_sort in ("asc", "desc"):
@@ -185,11 +249,40 @@ class MeilisearchBackend(BaseSearchBackend):
         pre_tag: str = params.pop("highlight_pre_tag", "<mark>")
         post_tag: str = params.pop("highlight_post_tag", "</mark>")
 
-        # Extract ranking score param and map to Meilisearch naming convention.
-        show_ranking_score: bool = params.pop("show_ranking_score", False)
+        # Extract crop params.
+        crop_fields: list[str] | None = params.pop("crop_fields", None)
+        crop_length: int | None = params.pop("crop_length", None)
+        crop_marker: str | None = params.pop("crop_marker", None)
 
-        # Extract matching strategy and map to Meilisearch naming convention.
+        # Extract ranking score params.
+        show_ranking_score: bool = params.pop("show_ranking_score", False)
+        show_ranking_score_details: bool = params.pop("show_ranking_score_details", False)
+        show_matches_position: bool = params.pop("show_matches_position", False)
+
+        # Extract matching strategy.
         matching_strategy: str | None = params.pop("matching_strategy", None)
+
+        # Extract field restriction params.
+        attributes_to_retrieve: list[str] | None = params.pop("attributes_to_retrieve", None)
+        attributes_to_search_on: list[str] | None = params.pop("attributes_to_search_on", None)
+
+        # Extract score threshold.
+        ranking_score_threshold: float | None = params.pop("ranking_score_threshold", None)
+
+        # Extract query-time distinct.
+        distinct_field: str | None = params.pop("distinct", None)
+
+        # Extract hybrid/semantic search params.
+        hybrid: dict[str, Any] | None = params.pop("hybrid", None)
+        vector: list[float] | None = params.pop("vector", None)
+        retrieve_vectors: bool = params.pop("retrieve_vectors", False)
+
+        # Extract page-based pagination params.
+        page: int | None = params.pop("page", None)
+        hits_per_page: int | None = params.pop("hits_per_page", None)
+
+        # Extract locale params.
+        locales: list[str] | None = params.pop("locales", None)
 
         body: dict[str, Any] = {"q": query, **params}
 
@@ -198,11 +291,54 @@ class MeilisearchBackend(BaseSearchBackend):
             body["highlightPreTag"] = pre_tag
             body["highlightPostTag"] = post_tag
 
+        if crop_fields:
+            body["attributesToCrop"] = crop_fields
+            if crop_length is not None:
+                body["cropLength"] = crop_length
+            if crop_marker is not None:
+                body["cropMarker"] = crop_marker
+
         if show_ranking_score:
             body["showRankingScore"] = True
 
+        if show_ranking_score_details:
+            body["showRankingScoreDetails"] = True
+
+        if show_matches_position:
+            body["showMatchesPosition"] = True
+
         if matching_strategy is not None:
             body["matchingStrategy"] = matching_strategy
+
+        if attributes_to_retrieve is not None:
+            body["attributesToRetrieve"] = attributes_to_retrieve
+
+        if attributes_to_search_on is not None:
+            body["attributesToSearchOn"] = attributes_to_search_on
+
+        if ranking_score_threshold is not None:
+            body["rankingScoreThreshold"] = ranking_score_threshold
+
+        if distinct_field is not None:
+            body["distinct"] = distinct_field
+
+        if hybrid is not None:
+            body["hybrid"] = hybrid
+
+        if vector is not None:
+            body["vector"] = vector
+
+        if retrieve_vectors:
+            body["retrieveVectors"] = True
+
+        if page is not None:
+            body["page"] = page
+
+        if hits_per_page is not None:
+            body["hitsPerPage"] = hits_per_page
+
+        if locales is not None:
+            body["locales"] = locales
 
         return self._request("POST", f"/indexes/{uid}/search", json=body)
 

@@ -45,6 +45,23 @@ class BaseSearchBackend(ABC):
     def delete_documents(self, uid: str, document_ids: list[str]) -> dict[str, Any]:
         """Remove documents by ID. Returns engine task info."""
 
+    def delete_documents_by_filter(self, uid: str, filter_expr: str) -> dict[str, Any]:
+        """Remove documents matching a filter expression.
+
+        Not all engines support filter-based deletion. The default raises
+        ``NotImplementedError``.
+
+        Args:
+            uid: Index UID.
+            filter_expr: Engine-native filter expression string.
+
+        Returns:
+            Engine task info dict.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support delete_documents_by_filter()."
+        )
+
     @abstractmethod
     def clear_documents(self, uid: str) -> dict[str, Any]:
         """Remove ALL documents from an index without deleting the index itself."""

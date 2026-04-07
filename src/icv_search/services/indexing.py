@@ -49,6 +49,10 @@ def get_model_search_settings(model_class: type | None = None) -> dict[str, Any]
     if searchable:
         result["searchableAttributes"] = list(searchable)
 
+    displayed = getattr(model_class, "search_displayed_fields", [])
+    if displayed:
+        result["displayedAttributes"] = list(displayed)
+
     return result
 
 
@@ -397,6 +401,424 @@ def update_typo_tolerance(
         tenant_id: Tenant identifier (only needed if passing a name).
     """
     update_index_settings(name_or_index, {"typoTolerance": settings}, tenant_id=tenant_id)
+
+
+def get_displayed_attributes(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> list[str]:
+    """Get the displayed attributes for an index.
+
+    Returns the ``displayedAttributes`` portion of the index settings.
+    When ``["*"]`` (the default), all fields are returned in search results.
+    """
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("displayedAttributes", ["*"])
+
+
+def update_displayed_attributes(
+    name_or_index: str | SearchIndex,
+    attributes: list[str],
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set the displayed attributes for an index.
+
+    Controls which fields are included in search results. Pass ``["*"]`` to
+    return all fields (the Meilisearch default).
+    """
+    return update_index_settings(name_or_index, {"displayedAttributes": attributes}, tenant_id)
+
+
+def reset_displayed_attributes(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Reset displayed attributes to the default (all fields)."""
+    return update_index_settings(name_or_index, {"displayedAttributes": ["*"]}, tenant_id)
+
+
+def get_distinct_attribute(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> str | None:
+    """Get the distinct attribute for an index.
+
+    Returns the ``distinctAttribute`` value, or ``None`` when not set.
+    """
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("distinctAttribute")
+
+
+def update_distinct_attribute(
+    name_or_index: str | SearchIndex,
+    attribute: str | None,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set or clear the distinct attribute for an index.
+
+    When set, only one document per distinct field value appears in results.
+    Pass ``None`` to disable deduplication.
+    """
+    return update_index_settings(name_or_index, {"distinctAttribute": attribute}, tenant_id)
+
+
+def get_pagination_settings(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> dict:
+    """Get pagination settings for an index.
+
+    Returns the ``pagination`` portion of the index settings, including
+    ``maxTotalHits`` (default 1000).
+    """
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("pagination", {})
+
+
+def update_pagination_settings(
+    name_or_index: str | SearchIndex,
+    max_total_hits: int,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set the maximum total hits for pagination.
+
+    Controls the hard cap on the result window. Higher values allow deeper
+    pagination but increase memory usage.
+    """
+    return update_index_settings(
+        name_or_index, {"pagination": {"maxTotalHits": max_total_hits}}, tenant_id
+    )
+
+
+def get_faceting_settings(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> dict:
+    """Get faceting settings for an index.
+
+    Returns the ``faceting`` portion of the index settings, including
+    ``maxValuesPerFacet`` and ``sortFacetValuesBy``.
+    """
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("faceting", {})
+
+
+def update_faceting_settings(
+    name_or_index: str | SearchIndex,
+    settings: dict,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Update faceting settings for an index.
+
+    Accepts a dict with any of: ``maxValuesPerFacet`` (int),
+    ``sortFacetValuesBy`` (dict mapping facet name to ``"alpha"`` or
+    ``"count"``).
+    """
+    return update_index_settings(name_or_index, {"faceting": settings}, tenant_id=tenant_id)
+
+
+def get_proximity_precision(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> str:
+    """Get the proximity precision setting for an index.
+
+    Returns ``"byWord"`` (default) or ``"byAttribute"``.
+    """
+    index_settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return index_settings.get("proximityPrecision", "byWord")
+
+
+def update_proximity_precision(
+    name_or_index: str | SearchIndex,
+    precision: str,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set the proximity precision for an index.
+
+    Args:
+        precision: ``"byWord"`` or ``"byAttribute"``.
+    """
+    return update_index_settings(name_or_index, {"proximityPrecision": precision}, tenant_id)
+
+
+def get_search_cutoff(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> int | None:
+    """Get the search cutoff time in milliseconds for an index.
+
+    Returns the ``searchCutoffMs`` value, or ``None`` when using the default
+    (1500ms).
+    """
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("searchCutoffMs")
+
+
+def update_search_cutoff(
+    name_or_index: str | SearchIndex,
+    cutoff_ms: int | None,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set the search timeout in milliseconds for an index.
+
+    Pass ``None`` to reset to the default (1500ms). Searches exceeding this
+    duration are aborted and return partial results.
+    """
+    return update_index_settings(name_or_index, {"searchCutoffMs": cutoff_ms}, tenant_id)
+
+
+def get_dictionary(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> list[str]:
+    """Get the custom dictionary for an index.
+
+    Returns multi-word strings that should be treated as single tokens
+    during indexing and search.
+    """
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("dictionary", [])
+
+
+def update_dictionary(
+    name_or_index: str | SearchIndex,
+    words: list[str],
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set the custom dictionary for an index.
+
+    Multi-word strings in the dictionary are treated as single tokens.
+    Useful for technical terms like ``"J. K. Rowling"`` or ``"C++"``.
+    """
+    return update_index_settings(name_or_index, {"dictionary": words}, tenant_id)
+
+
+def reset_dictionary(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Reset the custom dictionary to empty."""
+    return update_index_settings(name_or_index, {"dictionary": []}, tenant_id)
+
+
+def get_separator_tokens(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> list[str]:
+    """Get custom separator tokens for an index."""
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("separatorTokens", [])
+
+
+def update_separator_tokens(
+    name_or_index: str | SearchIndex,
+    tokens: list[str],
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set characters that should act as word separators."""
+    return update_index_settings(name_or_index, {"separatorTokens": tokens}, tenant_id)
+
+
+def reset_separator_tokens(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Reset separator tokens to the default set."""
+    return update_index_settings(name_or_index, {"separatorTokens": []}, tenant_id)
+
+
+def get_non_separator_tokens(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> list[str]:
+    """Get custom non-separator tokens for an index."""
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("nonSeparatorTokens", [])
+
+
+def update_non_separator_tokens(
+    name_or_index: str | SearchIndex,
+    tokens: list[str],
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set characters that should NOT act as word separators."""
+    return update_index_settings(name_or_index, {"nonSeparatorTokens": tokens}, tenant_id)
+
+
+def reset_non_separator_tokens(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Reset non-separator tokens to the default set."""
+    return update_index_settings(name_or_index, {"nonSeparatorTokens": []}, tenant_id)
+
+
+def get_prefix_search(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> str:
+    """Get the prefix search setting for an index.
+
+    Returns ``"indexingTime"`` (default) or ``"disabled"``.
+    """
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("prefixSearch", "indexingTime")
+
+
+def update_prefix_search(
+    name_or_index: str | SearchIndex,
+    mode: str,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set the prefix search mode for an index.
+
+    Args:
+        mode: ``"indexingTime"`` (enable prefix matching, default) or
+            ``"disabled"`` (only match exact words).
+    """
+    return update_index_settings(name_or_index, {"prefixSearch": mode}, tenant_id)
+
+
+def get_embedders(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> dict[str, Any]:
+    """Get the embedder configurations for an index.
+
+    Returns a dict mapping embedder names to their configuration.  Empty
+    dict when no embedders are configured.
+    """
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("embedders", {})
+
+
+def update_embedders(
+    name_or_index: str | SearchIndex,
+    embedders: dict[str, Any],
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set or update embedder configurations for an index.
+
+    Each embedder is a named config with at minimum a ``source`` key.
+    Supported sources: ``openAi``, ``huggingFace``, ``ollama``, ``rest``,
+    ``userProvided``, ``composite``.
+
+    Example::
+
+        update_embedders("products", {
+            "default": {
+                "source": "openAi",
+                "apiKey": "sk-...",
+                "model": "text-embedding-3-small",
+                "dimensions": 1536,
+            }
+        })
+    """
+    return update_index_settings(name_or_index, {"embedders": embedders}, tenant_id)
+
+
+def reset_embedders(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Remove all embedder configurations from an index."""
+    return update_index_settings(name_or_index, {"embedders": None}, tenant_id)
+
+
+def get_localized_attributes(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> list[dict[str, Any]]:
+    """Get localised attribute rules for an index.
+
+    Each rule maps attribute patterns to locale codes for language-specific
+    tokenisation.
+    """
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("localizedAttributes", [])
+
+
+def update_localized_attributes(
+    name_or_index: str | SearchIndex,
+    rules: list[dict[str, Any]],
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set localised attribute rules for an index.
+
+    Example::
+
+        update_localized_attributes("products", [
+            {"attributePatterns": ["name_ja", "desc_ja"], "locales": ["jpn"]},
+            {"attributePatterns": ["name_*"], "locales": ["eng"]},
+        ])
+    """
+    return update_index_settings(name_or_index, {"localizedAttributes": rules}, tenant_id)
+
+
+def reset_localized_attributes(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Remove all localised attribute rules from an index."""
+    return update_index_settings(name_or_index, {"localizedAttributes": []}, tenant_id)
+
+
+def get_ranking_rules(
+    name_or_index: str | SearchIndex,
+    *,
+    tenant_id: str = "",
+) -> list[str]:
+    """Get the ranking rules for an index.
+
+    Returns the ordered list of ranking rules.  Default Meilisearch order:
+    ``["words", "typo", "proximity", "attribute", "sort", "exactness"]``.
+    """
+    settings = get_index_settings(name_or_index, tenant_id=tenant_id)
+    return settings.get("rankingRules", [])
+
+
+def update_ranking_rules(
+    name_or_index: str | SearchIndex,
+    rules: list[str],
+    *,
+    tenant_id: str = "",
+) -> SearchIndex:
+    """Set the ranking rules for an index.
+
+    Order matters — each rule is a tiebreaker for the previous one.
+    """
+    return update_index_settings(name_or_index, {"rankingRules": rules}, tenant_id)
 
 
 def compact_index(

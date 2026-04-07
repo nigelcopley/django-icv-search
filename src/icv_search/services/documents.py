@@ -108,6 +108,59 @@ def remove_documents(
         raise
 
 
+def delete_documents_by_filter(
+    name_or_index: str | SearchIndex,
+    filter_expr: str | dict[str, Any],
+    tenant_id: str = "",
+) -> TaskResult:
+    """Remove documents matching a filter expression.
+
+    Uses the engine's filter-based deletion (e.g. Meilisearch's
+    ``POST /indexes/{uid}/documents/delete`` with a filter body).
+
+    Args:
+        name_or_index: Index name or SearchIndex instance.
+        filter_expr: A filter expression string (engine-native format) or a
+            Django-native filter dict that will be translated automatically.
+        tenant_id: Tenant identifier (only needed if passing a name).
+
+    Returns:
+        Normalised TaskResult for the engine operation.
+    """
+    from icv_search.backends.filters import translate_filter_to_meilisearch
+
+    index = resolve_index(name_or_index, tenant_id)
+    backend = get_search_backend()
+
+    # Translate dict filters to engine-native string format.
+    if isinstance(filter_expr, dict):
+        filter_expr = translate_filter_to_meilisearch(filter_expr)
+
+    log = IndexSyncLog.objects.create(index=index, action="documents_deleted", status="pending")
+
+    try:
+        raw_result = backend.delete_documents_by_filter(
+            uid=index.engine_uid, filter_expr=filter_expr
+        )
+        task_result = TaskResult.from_engine(raw_result)
+        log.task_uid = task_result.task_uid
+        log.mark_complete(status="success", detail=f"Deleted documents by filter: {filter_expr}")
+
+        documents_removed.send(
+            sender=SearchIndex,
+            instance=index,
+            count=0,
+            document_ids=[],
+        )
+        logger.info("Deleted documents by filter from '%s': %s", index.name, filter_expr)
+        return task_result
+
+    except SearchBackendError as exc:
+        log.mark_complete(status="failed", detail=str(exc))
+        logger.exception("Failed to delete documents by filter from '%s'.", index.name)
+        raise
+
+
 def delete_document(
     name_or_index: str | SearchIndex,
     document_id: str,
