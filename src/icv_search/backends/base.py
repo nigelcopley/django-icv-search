@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class BaseSearchBackend(ABC):
@@ -20,6 +23,45 @@ class BaseSearchBackend(ABC):
         self.url = url
         self.api_key = api_key
         self.timeout = timeout
+
+    # Known Meilisearch-specific params that other backends may not support.
+    _MEILI_SPECIFIC: frozenset[str] = frozenset(
+        {
+            "crop_fields",
+            "crop_length",
+            "crop_marker",
+            "show_ranking_score_details",
+            "show_matches_position",
+            "ranking_score_threshold",
+            "distinct",
+            "hybrid",
+            "vector",
+            "retrieve_vectors",
+            "page",
+            "hits_per_page",
+            "locales",
+            "geo_bbox",
+            "geo_polygon",
+            "attributes_to_search_on",
+        }
+    )
+
+    def _warn_unsupported_params(self, params: dict[str, Any], supported: set[str]) -> None:
+        """Log a warning for any Meilisearch-specific params that this backend ignores.
+
+        Args:
+            params: The full search params dict as received by ``search()``.
+            supported: Set of Meilisearch-specific param names that this
+                particular backend does in fact support, and should therefore
+                not be warned about.
+        """
+        unsupported = set(params.keys()) & (self._MEILI_SPECIFIC - supported)
+        if unsupported:
+            logger.debug(
+                "%s does not support search params: %s — they will be ignored.",
+                self.__class__.__name__,
+                ", ".join(sorted(unsupported)),
+            )
 
     @abstractmethod
     def create_index(self, uid: str, primary_key: str = "id") -> dict[str, Any]:
@@ -84,8 +126,8 @@ class BaseSearchBackend(ABC):
         """Execute multiple search queries, returning one result dict per query.
 
         Each query dict must contain ``uid`` (the engine index UID) and ``query``
-        (the search string). Optional keys: ``filter``, ``sort``, ``limit``,
-        ``offset``, ``facets``, ``attributesToHighlight``.
+        (the search string). All other keys are forwarded to :meth:`search`
+        as keyword arguments.
 
         The default implementation calls :meth:`search` in a loop. Backends
         that natively support multi-search (e.g. Meilisearch) should override

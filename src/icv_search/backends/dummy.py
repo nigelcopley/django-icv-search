@@ -96,6 +96,7 @@ class DummyBackend(BaseSearchBackend):
           point.  Each hit gains a ``_geoDistance`` key (metres) matching
           the behaviour of the Meilisearch backend.
         """
+        self._warn_unsupported_params(params, supported=set())
         docs = list(_documents.get(uid, {}).values())
 
         # Extract geo params.

@@ -398,6 +398,7 @@ class SolrBackend(BaseSearchBackend):
         ``searchableAttributes`` (list[str])
             Overrides ``qf`` for this request.
         """
+        self._warn_unsupported_params(params, supported=set())
         q = query or "*:*"
         rows: int = int(params.pop("limit", 20))
         start: int = int(params.pop("offset", 0))

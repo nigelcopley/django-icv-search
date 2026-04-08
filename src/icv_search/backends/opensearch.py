@@ -426,6 +426,7 @@ class OpenSearchBackend(BaseSearchBackend):
         - ``geo_sort`` (str): ``"asc"`` or ``"desc"`` for geo sort.
         - ``geo_field`` (str): Geo field name. Default ``"location"``.
         """
+        self._warn_unsupported_params(params, supported=set())
         limit: int = params.pop("limit", 20)
         offset: int = params.pop("offset", 0)
 

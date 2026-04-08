@@ -412,6 +412,7 @@ class TypesenseBackend(BaseSearchBackend):
         - ``geo_radius`` (int): Radius in metres for geo filter.
         - ``geo_sort`` (str): ``"asc"`` or ``"desc"`` for geo sort.
         """
+        self._warn_unsupported_params(params, supported=set())
         from icv_search.conf import ICV_SEARCH_TYPESENSE_GEO_FIELD
 
         limit: int = params.pop("limit", 20)

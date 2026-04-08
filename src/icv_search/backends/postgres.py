@@ -354,6 +354,7 @@ class PostgresBackend(BaseSearchBackend):
             ``estimatedTotalHits``, ``limit``, ``offset``, and optionally
             ``formatted_hits`` when ``highlight_fields`` is provided.
         """
+        self._warn_unsupported_params(params, supported=set())
         start = time.monotonic()
 
         limit: int = int(params.get("limit", 20))

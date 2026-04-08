@@ -553,6 +553,7 @@ class VespaBackend(BaseSearchBackend):
         Returns:
             Normalised search result dict compatible with ``SearchResult.from_engine()``.
         """
+        self._warn_unsupported_params(params, supported=set())
         limit: int = params.pop("limit", 20)
         offset: int = params.pop("offset", 0)
         filter_param: Any = params.pop("filter", None)

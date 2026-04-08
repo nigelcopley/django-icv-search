@@ -359,8 +359,9 @@ class MeilisearchBackend(BaseSearchBackend):
         """Execute multiple search queries via Meilisearch's POST /multi-search.
 
         Each query dict must contain ``uid`` (the Meilisearch index UID) and
-        ``query`` (the search string). Optional keys: ``filter``, ``sort``,
-        ``limit``, ``offset``, ``facets``, ``highlight_fields``.
+        ``query`` (the search string). All other keys are forwarded as
+        Meilisearch search parameters — filter/sort translation and
+        highlight_fields mapping are applied automatically.
 
         Returns:
             A list of raw Meilisearch search result dicts in query order.

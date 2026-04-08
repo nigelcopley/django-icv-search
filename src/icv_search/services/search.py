@@ -354,9 +354,18 @@ def multi_search(
 
     Each query dict must contain ``index_name`` (logical index name) and
     ``query`` (the search string). An optional ``tenant_id`` key overrides the
-    function-level ``tenant_id`` for that specific query. Additional keys
-    (``filter``, ``sort``, ``limit``, ``offset``, ``facets``,
-    ``highlight_fields``) are forwarded to the backend unchanged.
+    function-level ``tenant_id`` for that specific query.
+
+    All other keys are forwarded to the backend unchanged, including:
+    ``filter``, ``sort``, ``limit``, ``offset``, ``facets``,
+    ``highlight_fields``, ``crop_fields``, ``crop_length``, ``crop_marker``,
+    ``attributes_to_retrieve``, ``attributes_to_search_on``,
+    ``show_ranking_score``, ``show_ranking_score_details``,
+    ``show_matches_position``, ``matching_strategy``,
+    ``ranking_score_threshold``, ``distinct``, ``hybrid``, ``vector``,
+    ``retrieve_vectors``, ``page``, ``hits_per_page``, ``locales``,
+    ``geo_point``, ``geo_radius``, ``geo_sort``, ``geo_bbox``,
+    ``geo_polygon``.
 
     The function-level ``tenant_id`` is resolved via
     :func:`~icv_search.services._utils.resolve_tenant_id` so that the
