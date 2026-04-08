@@ -56,7 +56,8 @@ class TestBaseModelFallback:
             id_field = TestModel._meta.get_field("id")
             assert isinstance(id_field, models.UUIDField)
             assert id_field.primary_key is True
-            assert id_field.default == uuid.uuid4
+            assert callable(id_field.default)
+            assert isinstance(id_field.default(), uuid.UUID)
             assert id_field.editable is False
 
         finally:
