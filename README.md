@@ -309,8 +309,22 @@ from icv_search.services import (
     get_synonyms, update_synonyms, reset_synonyms,
     get_stop_words, update_stop_words, reset_stop_words,
     get_typo_tolerance, update_typo_tolerance,
+    # Index settings (1.0.0b1)
+    get_displayed_attributes, update_displayed_attributes, reset_displayed_attributes,
+    get_distinct_attribute, update_distinct_attribute,
+    get_pagination_settings, update_pagination_settings,
+    get_faceting_settings, update_faceting_settings,
+    get_proximity_precision, update_proximity_precision,
+    get_search_cutoff, update_search_cutoff,
+    get_dictionary, update_dictionary, reset_dictionary,
+    get_separator_tokens, update_separator_tokens, reset_separator_tokens,
+    get_non_separator_tokens, update_non_separator_tokens, reset_non_separator_tokens,
+    get_prefix_search, update_prefix_search,
+    get_embedders, update_embedders, reset_embedders,
+    get_localized_attributes, update_localized_attributes, reset_localized_attributes,
+    get_ranking_rules, update_ranking_rules,
     # Document operations
-    index_documents, remove_documents,
+    index_documents, remove_documents, delete_documents_by_filter,
     index_model_instances, reindex_all, reindex_zero_downtime,
     # Search
     search, multi_search, get_task,
@@ -616,6 +630,662 @@ paginator = SearchQuery("products").text("shoes").limit(25).paginate()
 page = paginator.get_page(1)
 ```
 
+### Hybrid and Semantic Search
+
+Hybrid search blends keyword and vector results in a single query. To use it, first configure an embedder on the index.
+
+#### Configure embedders
+
+```python
+from icv_search.services import update_embedders
+
+# OpenAI embedder
+update_embedders("products", {
+    "default": {
+        "source": "openAi",
+        "apiKey": "sk-...",
+        "model": "text-embedding-3-small",
+        "dimensions": 1536,
+    }
+})
+
+# Self-hosted via Ollama
+update_embedders("products", {
+    "local": {
+        "source": "ollama",
+        "url": "http://localhost:11434/api/embeddings",
+        "model": "nomic-embed-text",
+        "dimensions": 768,
+    }
+})
+
+# User-provided vectors (pass the vector at search time)
+update_embedders("products", {
+    "custom": {
+        "source": "userProvided",
+        "dimensions": 512,
+    }
+})
+```
+
+#### Hybrid search via `SearchQuery`
+
+```python
+results = (
+    SearchQuery("products")
+    .text("running shoes")
+    .hybrid(semantic_ratio=0.5, embedder="default")
+    .limit(20)
+    .execute()
+)
+```
+
+`semantic_ratio` controls the blend: `0.0` is pure keyword, `1.0` is pure semantic.
+
+#### Pure vector search
+
+Pass a raw embedding to query by vector alone (no keyword component):
+
+```python
+import numpy as np
+
+embedding = embed_text("comfortable running shoe")  # your embedder call
+
+results = (
+    SearchQuery("products")
+    .vector(embedding)
+    .limit(20)
+    .execute()
+)
+```
+
+#### Include vectors in results
+
+Call `.retrieve_vectors()` to have `_vectors` returned on each hit:
+
+```python
+results = (
+    SearchQuery("products")
+    .text("shoes")
+    .hybrid(semantic_ratio=0.7)
+    .retrieve_vectors()
+    .execute()
+)
+
+for hit in results.hits:
+    print(hit.get("_vectors"))
+```
+
+Hybrid and vector search are **Meilisearch-only**. PostgreSQL and DummyBackend silently ignore these parameters.
+
+---
+
+### Snippet Cropping
+
+Cropping returns short excerpts containing the match terms, with a configurable word budget and boundary marker. Cropped text appears in `formatted_hits` alongside highlighted content.
+
+```python
+result = search("articles", "django tips",
+    crop_fields=["body"],
+    crop_length=20,          # words per excerpt
+    crop_marker="...",       # boundary marker
+)
+
+for hit in result.get_highlighted_hits():
+    print(hit["body"])  # "...about <mark>Django</mark> <mark>tips</mark>..."
+```
+
+Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("articles")
+    .text("django tips")
+    .crop("body", length=20, marker="…")
+    .execute()
+)
+```
+
+Cropping is **Meilisearch-only**. Other backends ignore `crop_fields`, `crop_length`, and `crop_marker`.
+
+---
+
+### Page-Based Pagination
+
+Use page-based pagination (`page` + `hits_per_page`) instead of offset-based (`limit` + `offset`) when the engine returns exact totals. This gives access to `total_hits` and `total_pages` on `SearchResult`.
+
+```python
+result = search("products", "shoes", page=2, hits_per_page=20)
+
+print(result.page)          # 2
+print(result.hits_per_page) # 20
+print(result.total_hits)    # 143  (exact, not estimated)
+print(result.total_pages)   # 8
+```
+
+Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("products")
+    .text("shoes")
+    .page(2, per_page=20)
+    .execute()
+)
+```
+
+**Note:** `page` and `hits_per_page` are mutually exclusive with `limit` and `offset` — use one approach per query. Page-based mode is **Meilisearch-only**. The `total_hits` and `total_pages` fields on `SearchResult` are `None` when offset-based pagination is used.
+
+To control the maximum result window, configure `pagination.maxTotalHits` on the index (default 1000):
+
+```python
+from icv_search.services import update_pagination_settings
+update_pagination_settings("products", max_total_hits=5000)
+```
+
+---
+
+### Geo Bounding Box and Polygon
+
+Filter results to a rectangular or arbitrary geographic region.
+
+#### Bounding box
+
+```python
+# Only return results within a bounding box
+result = search("restaurants", "",
+    geo_bbox=((51.52, -0.08), (51.50, -0.14)),  # (top_right, bottom_left)
+)
+```
+
+Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("venues")
+    .text("")
+    .geo_bbox(top_right=(51.52, -0.08), bottom_left=(51.50, -0.14))
+    .execute()
+)
+```
+
+#### Polygon
+
+```python
+result = search("properties", "",
+    geo_polygon=[
+        (51.52, -0.14),
+        (51.52, -0.08),
+        (51.50, -0.08),
+        (51.50, -0.14),
+    ],
+)
+```
+
+Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("properties")
+    .geo_polygon([
+        (51.52, -0.14),
+        (51.52, -0.08),
+        (51.50, -0.08),
+        (51.50, -0.14),
+    ])
+    .execute()
+)
+```
+
+Geo bounding box and polygon are **Meilisearch-only**. Use the existing `.geo_near()` method for radius-based geo search, which works across all backends.
+
+---
+
+### Field Restriction
+
+#### `attributes_to_retrieve` — limit returned fields
+
+Reduce response payload by restricting which fields are returned in hits:
+
+```python
+result = search("products", "shoes",
+    attributes_to_retrieve=["id", "name", "price"],
+)
+```
+
+The `id` field is always included regardless of the list. Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("products")
+    .text("shoes")
+    .attributes_to_retrieve("id", "name", "price")
+    .execute()
+)
+```
+
+Supported on **all backends**. On PostgreSQL and DummyBackend the filtering is applied in Python after the search.
+
+#### `attributes_to_search_on` — limit search scope
+
+Restrict which fields are searched at query time, without modifying the index's permanent `searchableAttributes` configuration:
+
+```python
+result = search("products", "nike",
+    attributes_to_search_on=["name", "brand"],
+)
+```
+
+Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("products")
+    .text("nike")
+    .attributes_to_search_on("name", "brand")
+    .execute()
+)
+```
+
+`attributes_to_search_on` is **Meilisearch-only**.
+
+---
+
+### Query-Time Distinct
+
+Deduplicate results on a field at query time, without changing the index's permanent `distinctAttribute` setting:
+
+```python
+result = search("products", "trainers", distinct="brand")
+```
+
+Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("products")
+    .text("trainers")
+    .distinct("brand")
+    .execute()
+)
+```
+
+Only one document per `brand` value appears in results. Query-time distinct is **Meilisearch-only**.
+
+To set distinct deduplication permanently at the index level, use `update_distinct_attribute()` instead.
+
+---
+
+### Score Threshold and Details
+
+#### Ranking score threshold
+
+Exclude results whose relevance score falls below a minimum:
+
+```python
+result = search("products", "shoes", ranking_score_threshold=0.5)
+```
+
+Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("products")
+    .text("shoes")
+    .ranking_score_threshold(0.5)
+    .execute()
+)
+```
+
+#### Per-rule score details
+
+Request a breakdown of how each ranking rule contributed to a hit's score:
+
+```python
+result = search("products", "shoes", show_ranking_score_details=True)
+
+for i, detail in enumerate(result.ranking_score_details):
+    print(f"Hit {i}: {detail}")
+# {"words": {"order": 0, "matchingWords": 1, "maxMatchingWords": 1, "score": 1.0}, ...}
+```
+
+Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("products")
+    .text("shoes")
+    .show_ranking_score_details()
+    .execute()
+)
+```
+
+#### Match positions
+
+Request byte-level offsets of matched terms in each hit:
+
+```python
+result = search("articles", "django", show_matches_position=True)
+
+for i, pos in enumerate(result.matches_position):
+    print(f"Hit {i}: {pos}")
+# {"title": [{"start": 0, "length": 6}], "body": [{"start": 42, "length": 6}]}
+```
+
+Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("articles")
+    .text("django")
+    .show_matches_position()
+    .execute()
+)
+```
+
+`ranking_score_threshold`, `show_ranking_score_details`, and `show_matches_position` are **Meilisearch-only**.
+
+---
+
+### Locale Support
+
+Set ISO-639-3 language codes to tell the engine which language-specific tokeniser rules to apply for a given query. Useful when an index contains documents in multiple languages:
+
+```python
+result = search("articles", "走る", locales=["jpn"])
+```
+
+Via `SearchQuery`:
+
+```python
+results = (
+    SearchQuery("articles")
+    .text("走る")
+    .locales("jpn")
+    .execute()
+)
+```
+
+To configure locale rules at the index level (which attributes map to which languages), use `update_localized_attributes()`:
+
+```python
+from icv_search.services import update_localized_attributes
+
+update_localized_attributes("articles", [
+    {"attributePatterns": ["title_ja", "body_ja"], "locales": ["jpn"]},
+    {"attributePatterns": ["title_*"], "locales": ["eng"]},
+])
+```
+
+Locale support is **Meilisearch-only**.
+
+---
+
+### Delete by Filter
+
+Remove documents matching a filter expression without knowing their IDs:
+
+```python
+from icv_search.services import delete_documents_by_filter
+
+# Engine-native filter string
+result = delete_documents_by_filter("products", "is_active = false")
+
+# Django-native filter dict (translated automatically)
+result = delete_documents_by_filter("products", {"is_active": False})
+
+print(result.task_uid)
+```
+
+Returns a `TaskResult`. The operation is asynchronous on Meilisearch — use `get_task(result.task_uid)` to poll for completion.
+
+`delete_documents_by_filter` is **Meilisearch-only**. Calling it on PostgreSQL or DummyBackend raises `SearchBackendError`.
+
+---
+
+### New Index Settings (1.0.0b1)
+
+All settings functions follow the same three-function pattern: `get_*`, `update_*`, and (where applicable) `reset_*`. Import from `icv_search.services`.
+
+#### Embedders
+
+Configure vector embedding models for semantic and hybrid search:
+
+```python
+from icv_search.services import get_embedders, update_embedders, reset_embedders
+
+update_embedders("products", {
+    "default": {
+        "source": "openAi",
+        "apiKey": "sk-...",
+        "model": "text-embedding-3-small",
+        "dimensions": 1536,
+    }
+})
+
+current = get_embedders("products")
+reset_embedders("products")  # removes all embedder config
+```
+
+#### Displayed attributes
+
+Control which fields are returned in search results (index-level default):
+
+```python
+from icv_search.services import (
+    get_displayed_attributes,
+    update_displayed_attributes,
+    reset_displayed_attributes,
+)
+
+update_displayed_attributes("products", ["id", "name", "price", "image_url"])
+reset_displayed_attributes("products")  # resets to ["*"] (all fields)
+```
+
+You can also declare `search_displayed_fields` on `SearchableMixin` to seed this setting from the model:
+
+```python
+class Product(SearchableMixin, models.Model):
+    search_displayed_fields = ["id", "name", "price", "image_url"]
+    # ...
+```
+
+#### Distinct attribute (index-level)
+
+Set permanent deduplication at the index level (as opposed to query-time `.distinct()`):
+
+```python
+from icv_search.services import get_distinct_attribute, update_distinct_attribute
+
+update_distinct_attribute("products", "brand")
+update_distinct_attribute("products", None)  # disable
+current = get_distinct_attribute("products")  # returns "brand" or None
+```
+
+#### Pagination settings
+
+Control the hard cap on the result window for page-based pagination:
+
+```python
+from icv_search.services import get_pagination_settings, update_pagination_settings
+
+update_pagination_settings("products", max_total_hits=5000)
+current = get_pagination_settings("products")
+# {"maxTotalHits": 5000}
+```
+
+#### Faceting settings
+
+Configure facet value limits and sort order:
+
+```python
+from icv_search.services import get_faceting_settings, update_faceting_settings
+
+update_faceting_settings("products", {
+    "maxValuesPerFacet": 50,
+    "sortFacetValuesBy": {
+        "brand": "alpha",    # alphabetical
+        "colour": "count",   # most-common first (default)
+    },
+})
+```
+
+#### Proximity precision
+
+Trade ranking accuracy for indexing speed:
+
+```python
+from icv_search.services import get_proximity_precision, update_proximity_precision
+
+update_proximity_precision("products", "byAttribute")   # faster indexing
+update_proximity_precision("products", "byWord")        # default — precise
+```
+
+#### Search cutoff
+
+Set a per-index timeout (milliseconds) after which searches return partial results:
+
+```python
+from icv_search.services import get_search_cutoff, update_search_cutoff
+
+update_search_cutoff("products", 500)    # abort after 500 ms
+update_search_cutoff("products", None)   # reset to default (1500 ms)
+```
+
+#### Custom dictionary
+
+Declare multi-word strings that should be indexed and searched as single tokens:
+
+```python
+from icv_search.services import get_dictionary, update_dictionary, reset_dictionary
+
+update_dictionary("products", ["J. K. Rowling", "C++", "node.js"])
+```
+
+#### Separator and non-separator tokens
+
+```python
+from icv_search.services import (
+    update_separator_tokens, reset_separator_tokens,
+    update_non_separator_tokens, reset_non_separator_tokens,
+)
+
+# Treat these characters as word boundaries
+update_separator_tokens("products", ["|", "·"])
+
+# Prevent these characters from splitting words
+update_non_separator_tokens("products", ["-", "_"])
+```
+
+#### Prefix search
+
+Control whether prefix matching is applied at indexing time:
+
+```python
+from icv_search.services import get_prefix_search, update_prefix_search
+
+update_prefix_search("products", "disabled")      # exact words only
+update_prefix_search("products", "indexingTime")  # default
+```
+
+#### Localised attributes
+
+Map attribute patterns to language codes for language-specific tokenisation:
+
+```python
+from icv_search.services import (
+    get_localized_attributes,
+    update_localized_attributes,
+    reset_localized_attributes,
+)
+
+update_localized_attributes("articles", [
+    {"attributePatterns": ["title_ja", "body_ja"], "locales": ["jpn"]},
+    {"attributePatterns": ["title_*"], "locales": ["eng"]},
+])
+```
+
+#### Ranking rules
+
+Customise the order in which ranking criteria are applied:
+
+```python
+from icv_search.services import get_ranking_rules, update_ranking_rules
+
+# Promote exact matches; deprioritise proximity
+update_ranking_rules("products", [
+    "words", "typo", "exactness", "proximity", "attribute", "sort",
+])
+
+current = get_ranking_rules("products")
+# Default: ["words", "typo", "proximity", "attribute", "sort", "exactness"]
+```
+
+#### Complete settings function reference
+
+| Setting group | Functions |
+|---------------|-----------|
+| Embedders | `get_embedders`, `update_embedders`, `reset_embedders` |
+| Displayed attributes | `get_displayed_attributes`, `update_displayed_attributes`, `reset_displayed_attributes` |
+| Distinct attribute | `get_distinct_attribute`, `update_distinct_attribute` |
+| Pagination | `get_pagination_settings`, `update_pagination_settings` |
+| Faceting | `get_faceting_settings`, `update_faceting_settings` |
+| Proximity precision | `get_proximity_precision`, `update_proximity_precision` |
+| Search cutoff | `get_search_cutoff`, `update_search_cutoff` |
+| Dictionary | `get_dictionary`, `update_dictionary`, `reset_dictionary` |
+| Separator tokens | `get_separator_tokens`, `update_separator_tokens`, `reset_separator_tokens` |
+| Non-separator tokens | `get_non_separator_tokens`, `update_non_separator_tokens`, `reset_non_separator_tokens` |
+| Prefix search | `get_prefix_search`, `update_prefix_search` |
+| Localised attributes | `get_localized_attributes`, `update_localized_attributes`, `reset_localized_attributes` |
+| Ranking rules | `get_ranking_rules`, `update_ranking_rules` |
+| Synonyms (existing) | `get_synonyms`, `update_synonyms`, `reset_synonyms` |
+| Stop words (existing) | `get_stop_words`, `update_stop_words`, `reset_stop_words` |
+| Typo tolerance (existing) | `get_typo_tolerance`, `update_typo_tolerance` |
+
+---
+
+### Backend Support Matrix
+
+Features marked Meilisearch-only are silently ignored on other backends unless noted otherwise.
+
+| Feature | Meilisearch | PostgreSQL | DummyBackend |
+|---------|-------------|------------|--------------|
+| Full-text search | Yes | Yes | Yes (substring) |
+| Filters (equality, range, `__in`) | Yes | Yes | Yes |
+| Sort | Yes | Yes | Yes |
+| Facets | Yes | Yes | Yes |
+| Highlighting | Yes (native) | Yes (`ts_headline`) | Yes (substring wrap) |
+| Ranking scores | Yes (`_rankingScore`) | Yes (`ts_rank`) | Yes (term frequency) |
+| Geo-distance (`.geo_near()`) | Yes | Yes (Haversine) | Yes (Haversine) |
+| Multi-search | Yes (native batch) | Sequential | Sequential |
+| `attributes_to_retrieve` | Yes | Yes | Yes |
+| `delete_documents_by_filter` | Yes | No (raises error) | No (raises error) |
+| Snippet cropping (`.crop()`) | Yes | No | No |
+| Page-based pagination (`.page()`) | Yes | No | No |
+| Geo bounding box (`.geo_bbox()`) | Yes | No | No |
+| Geo polygon (`.geo_polygon()`) | Yes | No | No |
+| Hybrid/semantic search (`.hybrid()`) | Yes | No | No |
+| Vector search (`.vector()`) | Yes | No | No |
+| `attributes_to_search_on` | Yes | No | No |
+| Query-time distinct (`.distinct()`) | Yes | No | No |
+| Ranking score threshold | Yes | No | No |
+| Ranking score details | Yes | No | No |
+| Match positions | Yes | No | No |
+| Locale support (`.locales()`) | Yes | No | No |
+| Embedder configuration | Yes | No | No |
+| Distinct attribute (index setting) | Yes | No | No |
+| Localised attributes (index setting) | Yes | No | No |
+| Prefix search (index setting) | Yes | No | No |
+| Proximity precision (index setting) | Yes | No | No |
+| Search cutoff (index setting) | Yes | No | No |
+| Faceting settings | Yes | No | No |
+| Pagination settings (`maxTotalHits`) | Yes | No | No |
+| Separator/non-separator tokens | Yes | No | No |
+| Dictionary | Yes | No | No |
+| Ranking rules | Yes | No | No |
+
+---
+
 ### Search Analytics
 
 Enable query logging to track search behaviour:
@@ -809,6 +1479,12 @@ class SearchResult:
     facet_distribution: dict[str, dict[str, int]]
     formatted_hits: list[dict]
     ranking_scores: list[float | None]
+    ranking_score_details: list[dict | None]   # populated when show_ranking_score_details=True
+    matches_position: list[dict | None]         # populated when show_matches_position=True
+    page: int | None                            # page-based pagination only
+    hits_per_page: int | None                   # page-based pagination only
+    total_hits: int | None                      # exact count; page-based pagination only
+    total_pages: int | None                     # page-based pagination only
     raw: dict
 
     def get_highlighted_hits(self) -> list[dict]: ...
