@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-16
+
+First stable release. Promotes 1.0.0b1 to GA with fixes and expanded test
+coverage for cross-backend parameter handling.
+
+### Fixed
+
+- `multi_search()` now forwards all search params and normalises naming
+  consistently with `search()`
+- Non-Meilisearch backends emit warnings for unsupported params instead of
+  silently dropping them; docstrings updated to reflect backend capabilities
+- `SearchableMixin` UUID default assertion relaxed to accept `_make_uuid`
+
+### Added
+
+- Cross-backend tests covering param forwarding and field restriction
+- Tests for unsupported-param warnings on non-Meilisearch backends
+- 90% coverage threshold
+
+### Changed
+
+- README documents all 1.0.0b1 features
+- Classifier bumped to `Development Status :: 5 - Production/Stable`
+
 ## [1.0.0b1] - 2026-04-07
 
 First beta towards 1.0 — full Meilisearch capability parity.
