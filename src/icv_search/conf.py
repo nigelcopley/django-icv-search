@@ -168,3 +168,6 @@ ICV_SEARCH_TYPESENSE_FIELD_TYPES: dict = getattr(settings, "ICV_SEARCH_TYPESENSE
 # Name of the geo field in Typesense documents for geo search.
 # Typesense uses a "geopoint" type field (lat/lng stored as [lat, lng]).
 ICV_SEARCH_TYPESENSE_GEO_FIELD: str = getattr(settings, "ICV_SEARCH_TYPESENSE_GEO_FIELD", "_geo")
+
+# Number of days to retain IndexSyncLog entries before cleanup deletes them.
+ICV_SEARCH_SYNC_LOG_RETENTION_DAYS: int = getattr(settings, "ICV_SEARCH_SYNC_LOG_RETENTION_DAYS", 90)

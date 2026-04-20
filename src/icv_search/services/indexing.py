@@ -842,16 +842,21 @@ def compact_index(
     return backend.compact(uid=index.engine_uid)
 
 
-def clear_sync_logs(*, days_older_than: int = 90) -> int:
+def clear_sync_logs(*, days_older_than: int | None = None) -> int:
     """Delete IndexSyncLog rows older than the given number of days.
 
     Args:
         days_older_than: Records created more than this many days ago are
-            deleted.
+            deleted.  Defaults to ``ICV_SEARCH_SYNC_LOG_RETENTION_DAYS`` (90).
 
     Returns:
         Number of records deleted.
     """
+    if days_older_than is None:
+        from icv_search.conf import ICV_SEARCH_SYNC_LOG_RETENTION_DAYS
+
+        days_older_than = ICV_SEARCH_SYNC_LOG_RETENTION_DAYS
+
     cutoff = timezone.now() - timedelta(days=days_older_than)
     deleted_count, _ = IndexSyncLog.objects.filter(created_at__lt=cutoff).delete()
     logger.info("Deleted %d old index sync logs (older than %d days).", deleted_count, days_older_than)

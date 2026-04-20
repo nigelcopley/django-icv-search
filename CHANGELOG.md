@@ -13,6 +13,8 @@ All notable changes to this project will be documented in this file.
 - `cleanup_sync_logs` Celery task for periodic log cleanup via beat.
 - `icv_search_cleanup_sync_logs` management command with `--days` and
   `--dry-run` options.
+- `ICV_SEARCH_SYNC_LOG_RETENTION_DAYS` setting (default 90) to control
+  the retention period for sync logs.
 
 ## [1.0.0] - 2026-04-16
 

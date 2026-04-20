@@ -10,8 +10,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--days",
             type=int,
-            default=90,
-            help="Delete logs older than this many days (default: 90).",
+            default=None,
+            help="Delete logs older than this many days (default: ICV_SEARCH_SYNC_LOG_RETENTION_DAYS or 90).",
         )
         parser.add_argument(
             "--dry-run",
@@ -25,10 +25,11 @@ class Command(BaseCommand):
 
         from django.utils import timezone
 
+        from icv_search.conf import ICV_SEARCH_SYNC_LOG_RETENTION_DAYS
         from icv_search.models import IndexSyncLog
         from icv_search.services.indexing import clear_sync_logs
 
-        days = options["days"]
+        days = options["days"] if options["days"] is not None else ICV_SEARCH_SYNC_LOG_RETENTION_DAYS
         cutoff = timezone.now() - timedelta(days=days)
         count = IndexSyncLog.objects.filter(created_at__lt=cutoff).count()
 
