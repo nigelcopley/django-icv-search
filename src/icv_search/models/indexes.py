@@ -44,8 +44,9 @@ class SearchIndex(BaseModel):
         default=dict,
         blank=True,
         help_text=_(
-            "Engine settings: searchable_attributes, filterable_attributes, "
-            "sortable_attributes, synonyms, stop_words, ranking_rules."
+            "Engine settings in the search engine's native camelCase form: "
+            "searchableAttributes, filterableAttributes, sortableAttributes, "
+            "synonyms, stopWords, rankingRules."
         ),
     )
     document_count = models.PositiveIntegerField(
