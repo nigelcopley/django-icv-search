@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-06-20
+
+### Fixed
+
+- Index settings sync now normalises legacy snake_case keys (e.g.
+  `ranking_rules`, `searchable_attributes`) and the bare `ranking` alias to the
+  camelCase form Meilisearch expects (`rankingRules`, `searchableAttributes`).
+  Previously these were forwarded verbatim, causing Meilisearch to reject the
+  settings PATCH with a 400 `Unknown field` error and leaving the index
+  unsynced. The `SearchIndex.settings` help text now documents the camelCase
+  convention.
+
 ## [1.1.1] - 2026-04-20
 
 ### Added

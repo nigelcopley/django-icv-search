@@ -17,6 +17,47 @@ from icv_search.types import IndexStats, TaskResult
 
 logger = logging.getLogger(__name__)
 
+# Map legacy/snake_case setting keys to the camelCase names the Meilisearch
+# settings endpoint expects.  The model's ``settings`` JSONField historically
+# documented snake_case keys (and a bare ``ranking`` alias), but Meilisearch
+# only accepts camelCase and rejects unknown fields with a 400.  Normalising on
+# the way out keeps sync resilient to legacy/seeded data without forcing a data
+# migration.  Keys already in camelCase pass through unchanged.
+_SETTINGS_KEY_ALIASES: dict[str, str] = {
+    "searchable_attributes": "searchableAttributes",
+    "filterable_attributes": "filterableAttributes",
+    "sortable_attributes": "sortableAttributes",
+    "displayed_attributes": "displayedAttributes",
+    "distinct_attribute": "distinctAttribute",
+    "stop_words": "stopWords",
+    "ranking_rules": "rankingRules",
+    "ranking": "rankingRules",
+    "typo_tolerance": "typoTolerance",
+    "proximity_precision": "proximityPrecision",
+    "search_cutoff_ms": "searchCutoffMs",
+    "separator_tokens": "separatorTokens",
+    "non_separator_tokens": "nonSeparatorTokens",
+    "prefix_search": "prefixSearch",
+    "localized_attributes": "localizedAttributes",
+}
+
+
+def normalize_engine_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    """Translate legacy snake_case setting keys to Meilisearch camelCase.
+
+    Returns a new dict with recognised aliases renamed; unrecognised and
+    already-camelCase keys are preserved as-is.  If both an alias and its
+    canonical key are present, the canonical (camelCase) value wins.
+    """
+    normalized: dict[str, Any] = {}
+    for key, value in settings.items():
+        canonical = _SETTINGS_KEY_ALIASES.get(key, key)
+        # Don't let an alias clobber an explicit canonical key.
+        if canonical in settings and canonical != key:
+            continue
+        normalized[canonical] = value
+    return normalized
+
 
 def get_model_search_settings(model_class: type | None = None) -> dict[str, Any]:
     """Extract search engine settings from a SearchableMixin model class.
@@ -349,7 +390,8 @@ def _sync_index_to_engine(index: SearchIndex) -> None:
     log = IndexSyncLog.objects.create(index=index, action="settings_updated", status="pending")
 
     try:
-        raw_result = backend.update_settings(uid=index.engine_uid, settings=index.settings)
+        engine_settings = normalize_engine_settings(index.settings)
+        raw_result = backend.update_settings(uid=index.engine_uid, settings=engine_settings)
         task_result = TaskResult.from_engine(raw_result)
         log.task_uid = task_result.task_uid
         log.mark_complete(status="success")
