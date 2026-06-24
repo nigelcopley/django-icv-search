@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-06-24
+
 ### Fixed
 
 - `delete_documents_by_filter` is now substitutable across all backends.
