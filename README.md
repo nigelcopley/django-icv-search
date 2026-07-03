@@ -1,14 +1,12 @@
 # django-icv-search
 
-[![CI](https://github.com/nigelcopley/icv-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/nigelcopley/icv-oss/actions/workflows/ci.yml)
+[![CI](https://github.com/nigelcopley/django-icv-search/actions/workflows/ci.yml/badge.svg)](https://github.com/nigelcopley/django-icv-search/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/django-icv-search)](https://pypi.org/project/django-icv-search/)
 [![Python](https://img.shields.io/pypi/pyversions/django-icv-search)](https://pypi.org/project/django-icv-search/)
 [![Django](https://img.shields.io/badge/django-5.1%2B-green)](https://pypi.org/project/django-icv-search/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Search for Django without the lock-in. Point it at Meilisearch, PostgreSQL, or your own backend — the same service API, filters, and query builder work across all of them. Swap engines without rewriting application code.
-
-Part of the [ICV-Django](https://github.com/nigelcopley/icv-oss) ecosystem.
+Search for Django without the lock-in. Point it at Meilisearch, PostgreSQL, or your own backend: the same service API, filters, and query builder work across all of them. Swap engines without rewriting application code.
 
 ---
 
@@ -110,7 +108,7 @@ python manage.py migrate icv_search
 
 ### With icv-core
 
-Installing with the `icv-core` extra gives you `BaseModel` (UUID primary key plus `created_at` / `updated_at` timestamps) from [icv-core](https://github.com/nigelcopley/icv-oss):
+Installing with the `icv-core` extra gives you `BaseModel` (UUID primary key plus `created_at` / `updated_at` timestamps) from [django-icv-core](https://pypi.org/project/django-icv-core/):
 
 ```bash
 pip install "django-icv-search[icv-core]"

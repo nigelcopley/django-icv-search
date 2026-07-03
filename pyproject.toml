@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "django-icv-search"
 version = "1.1.3"
-description = "Pluggable search engine integration for Django — index management, document indexing, and search queries with swappable backends."
+description = "Pluggable search engine integration for Django: index management, document indexing, and search queries with swappable backends."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -34,11 +34,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/nigelcopley/icv-oss"
-Documentation = "https://github.com/nigelcopley/icv-oss/tree/main/packages/icv-search"
-Changelog = "https://github.com/nigelcopley/icv-oss/tree/main/packages/icv-search/CHANGELOG.md"
-"Issue Tracker" = "https://github.com/nigelcopley/icv-oss/issues"
-"Source Code" = "https://github.com/nigelcopley/icv-oss/tree/main/packages/icv-search"
+Homepage = "https://github.com/nigelcopley/django-icv-search"
+Documentation = "https://github.com/nigelcopley/django-icv-search/tree/main/docs"
+Changelog = "https://github.com/nigelcopley/django-icv-search/blob/main/CHANGELOG.md"
+"Issue Tracker" = "https://github.com/nigelcopley/django-icv-search/issues"
+"Source Code" = "https://github.com/nigelcopley/django-icv-search"
 
 [project.optional-dependencies]
 icv-core = ["django-icv-core>=0.1.0"]
@@ -59,10 +59,38 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
-# pytest config is centralised in the root pyproject.toml.
-# Run tests from the project root: pytest packages/icv-search/tests/
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "settings"
+pythonpath = ["src", "tests"]
 
-# ruff config is centralised in the root pyproject.toml.
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "SIM", # flake8-simplify
+    "DJ",  # flake8-django
+]
+ignore = [
+    "E501",   # line length handled by the formatter
+    "N806",   # User = get_user_model() is standard Django convention
+    "SIM105", # contextlib.suppress less readable than try/except/pass for DoesNotExist
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["icv_search"]
+
+[tool.ruff.format]
+quote-style = "double"
 
 [tool.mypy]
 python_version = "3.11"

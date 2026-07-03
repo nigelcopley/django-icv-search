@@ -10,7 +10,7 @@ variable (if your project's settings consume it).
 Example::
 
     DATABASE_URL=postgres://user:pass@localhost/icv_search_test \\
-        pytest packages/icv-search/tests/test_postgres_backend.py -v
+        pytest tests/test_postgres_backend.py -v
 """
 
 from __future__ import annotations
