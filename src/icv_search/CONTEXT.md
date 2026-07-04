@@ -46,8 +46,8 @@ All consuming projects needing search. No other `icv-*` packages depend on
 icv-search — consuming projects wire search into their own domains.
 
 ## Specs & Docs
-- APP spec: `docs/specs/APP-013-search/README.md`
-- Sub-feature specs: `docs/specs/APP-013-search/features/` (FEAT-001 through FEAT-012)
+- APP spec: `docs/specs/django-icv-search/README.md`
+- Sub-feature specs: `docs/specs/django-icv-search/features/` (FEAT-001 through FEAT-012)
 
 ## Current Status
 v0.8.0 — 1219 tests passing. Three bundled backends: Meilisearch (default),
