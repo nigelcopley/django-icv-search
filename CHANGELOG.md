@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.2.0] - 2026-07-09
 
 ### Added
 
@@ -12,6 +12,14 @@ All notable changes to this project will be documented in this file.
   squashed migration. The replaced originals remain in the package and
   will be removed in the next major release once all installations have
   passed the squash point.
+
+### Changed
+
+- Minimum Django is now 5.2 (was 5.0). Django 5.2 and 6.0 are the
+  supported and CI-tested versions.
+- Packaging: the build backend now requires setuptools 77+ (PEP 639
+  SPDX licence metadata) and no longer lists wheel; project URLs point
+  at the icvoss GitHub organisation.
 
 ## [1.1.3] - 2026-06-24
 
