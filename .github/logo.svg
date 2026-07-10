@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="django-icv-search mark">
+  <!-- Lens over the index -->
+  <rect x="8" y="14" width="30" height="8" rx="1.5" fill="#12241B" opacity="0.4"/>
+  <rect x="8" y="28" width="22" height="8" rx="1.5" fill="#12241B" opacity="0.4"/>
+  <circle cx="36" cy="30" r="14" fill="none" stroke="#12241B" stroke-width="5"/>
+  <rect x="44" y="41" width="16" height="7" rx="1.5" fill="#E8501A" transform="rotate(45 44 41)"/>
+</svg>
