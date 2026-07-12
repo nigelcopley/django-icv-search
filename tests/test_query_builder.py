@@ -8,8 +8,9 @@ import pytest
 
 from icv_search.backends import reset_search_backend
 from icv_search.backends.dummy import DummyBackend
+from icv_search.backends.meilisearch import MeilisearchBackend
 from icv_search.pagination import ICVSearchPaginator
-from icv_search.query import SearchQuery, _build_filter_expression, _format_value
+from icv_search.query import SearchQuery, _normalise_filters
 from icv_search.services import create_index, index_documents
 from icv_search.types import SearchResult
 
@@ -269,6 +270,19 @@ class TestBuildParams:
         params = SearchQuery("products").filter(brand="Nike")._build_params()
         assert "filter" in params
 
+    def test_filter_is_django_native_dict_not_meilisearch_expression_list(self):
+        """Regression test: filter() must not compile to a Meilisearch-only
+        expression list. DummyBackend and PostgresBackend require a native
+        dict; only Meilisearch's own backend translates it further."""
+        params = SearchQuery("products").filter(brand="Nike", price__gte=50)._build_params()
+        assert params["filter"] == {"brand": "Nike", "price__gte": 50}
+
+    def test_filter_in_suffix_normalised_to_bare_list_value(self):
+        """The `__in` suffix is query-builder sugar; backends expect a bare
+        list value with no suffix on the field name."""
+        params = SearchQuery("products").filter(category__in=["shoes", "boots"])._build_params()
+        assert params["filter"] == {"category": ["shoes", "boots"]}
+
     def test_sort_included(self):
         params = SearchQuery("products").sort("price")._build_params()
         assert params["sort"] == ["price"]
@@ -418,84 +432,165 @@ class TestPaginate:
 
 
 # ---------------------------------------------------------------------------
-# _build_filter_expression helper
+# _normalise_filters helper
 # ---------------------------------------------------------------------------
 
 
-class TestBuildFilterExpression:
-    """Unit tests for the private filter expression builder."""
+class TestNormaliseFilters:
+    """Unit tests for the private filter-kwargs normaliser.
 
-    def test_equality_filter_string(self):
-        exprs = _build_filter_expression({"brand": "Nike"})
-        assert exprs == ['brand = "Nike"']
+    Backends expect a Django-native filter dict: equality/range keys pass
+    through unchanged, and membership is a bare list value with no suffix
+    on the field name (see icv_search.backends.filters).
+    """
 
-    def test_equality_filter_integer(self):
-        exprs = _build_filter_expression({"stock": 5})
-        assert exprs == ["stock = 5"]
+    def test_equality_passes_through_unchanged(self):
+        assert _normalise_filters({"brand": "Nike"}) == {"brand": "Nike"}
 
-    def test_equality_filter_boolean_true(self):
-        exprs = _build_filter_expression({"is_active": True})
-        assert exprs == ["is_active = true"]
+    def test_range_suffixes_pass_through_unchanged(self):
+        filters = {"price__gte": 50, "price__lte": 200, "rating__gt": 4, "rating__lt": 3}
+        assert _normalise_filters(filters) == filters
 
-    def test_equality_filter_boolean_false(self):
-        exprs = _build_filter_expression({"is_active": False})
-        assert exprs == ["is_active = false"]
+    def test_in_suffix_stripped_to_bare_field_with_list_value(self):
+        assert _normalise_filters({"category__in": ["shoes", "boots"]}) == {"category": ["shoes", "boots"]}
 
-    def test_gte_operator(self):
-        exprs = _build_filter_expression({"price__gte": 50})
-        assert exprs == ["price >= 50"]
+    def test_bare_list_value_without_suffix_passes_through(self):
+        assert _normalise_filters({"category": ["shoes", "boots"]}) == {"category": ["shoes", "boots"]}
 
-    def test_lte_operator(self):
-        exprs = _build_filter_expression({"price__lte": 200})
-        assert exprs == ["price <= 200"]
-
-    def test_gt_operator(self):
-        exprs = _build_filter_expression({"rating__gt": 4})
-        assert exprs == ["rating > 4"]
-
-    def test_lt_operator(self):
-        exprs = _build_filter_expression({"rating__lt": 3})
-        assert exprs == ["rating < 3"]
-
-    def test_ne_operator(self):
-        exprs = _build_filter_expression({"status__ne": "inactive"})
-        assert exprs == ['status != "inactive"']
-
-    def test_in_operator(self):
-        exprs = _build_filter_expression({"category__in": ["shoes", "boots"]})
-        assert exprs == ['category IN ["shoes", "boots"]']
-
-    def test_multiple_filters_produce_multiple_expressions(self):
-        exprs = _build_filter_expression({"brand": "Nike", "price__gte": 50})
-        assert len(exprs) == 2
-
-    def test_string_value_escapes_double_quotes(self):
-        exprs = _build_filter_expression({"name": 'He said "hello"'})
-        assert '\\"' in exprs[0]
+    def test_multiple_filters_all_normalised(self):
+        filters = {"brand": "Nike", "price__gte": 50, "category__in": ["shoes"]}
+        assert _normalise_filters(filters) == {"brand": "Nike", "price__gte": 50, "category": ["shoes"]}
 
 
 # ---------------------------------------------------------------------------
-# _format_value helper
+# Cross-backend: .filter() must work through every backend's search()
 # ---------------------------------------------------------------------------
 
 
-class TestFormatValue:
-    """Unit tests for the private value formatter."""
+class TestFilterCrossBackend:
+    """Regression tests: SearchQuery.filter() must produce a filter value
+    every configured backend accepts, not a Meilisearch-only expression list.
 
-    def test_string_wrapped_in_double_quotes(self):
-        assert _format_value("Nike") == '"Nike"'
+    Prior to the fix, _build_params() compiled .filter() into a list[str] of
+    Meilisearch filter expressions (e.g. 'brand = "Nike"') unconditionally.
+    DummyBackend's apply_filters_to_documents() calls filters.items() and
+    raised AttributeError on a list; PostgresBackend's search() silently
+    ignored a list filter (neither the dict nor the str branch matched),
+    returning unfiltered results. Only Meilisearch tolerated it, because its
+    HTTP API accepts either a string or an array of clause strings.
+    """
 
-    def test_integer_as_string(self):
-        assert _format_value(42) == "42"
+    @pytest.mark.django_db
+    def test_dummy_backend_applies_equality_filter(self):
+        """Regression: used to raise AttributeError('list' has no 'items')."""
+        create_index("products")
+        index_documents(
+            "products",
+            [
+                {"id": "1", "name": "Shoes", "brand": "Nike"},
+                {"id": "2", "name": "Shirt", "brand": "Adidas"},
+            ],
+        )
+        result = SearchQuery("products").text("").filter(brand="Nike").execute()
+        assert len(result.hits) == 1
+        assert result.hits[0]["brand"] == "Nike"
 
-    def test_float_as_string(self):
-        assert _format_value(3.14) == "3.14"
+    @pytest.mark.django_db
+    def test_dummy_backend_applies_range_filter(self):
+        create_index("products")
+        index_documents(
+            "products",
+            [
+                {"id": "1", "name": "Cheap", "price": 10},
+                {"id": "2", "name": "Pricey", "price": 100},
+            ],
+        )
+        result = SearchQuery("products").text("").filter(price__gte=50).execute()
+        assert len(result.hits) == 1
+        assert result.hits[0]["name"] == "Pricey"
 
-    def test_true_as_lowercase(self):
-        assert _format_value(True) == "true"
+    @pytest.mark.django_db
+    def test_dummy_backend_applies_membership_filter_via_in_suffix(self):
+        create_index("products")
+        index_documents(
+            "products",
+            [
+                {"id": "1", "name": "Shoes", "category": "footwear"},
+                {"id": "2", "name": "Hat", "category": "headwear"},
+            ],
+        )
+        result = SearchQuery("products").text("").filter(category__in=["footwear"]).execute()
+        assert len(result.hits) == 1
+        assert result.hits[0]["name"] == "Shoes"
 
-    def test_false_as_lowercase(self):
-        assert _format_value(False) == "false"
+    @pytest.mark.django_db
+    def test_dummy_backend_applies_combined_filters(self):
+        """Regression: previously ANDed Meilisearch expressions ('field = "x"')
+        that DummyBackend could never match against plain document values."""
+        create_index("products")
+        index_documents(
+            "products",
+            [
+                {"id": "1", "name": "A", "brand": "Nike", "price": 120},
+                {"id": "2", "name": "B", "brand": "Nike", "price": 40},
+                {"id": "3", "name": "C", "brand": "Adidas", "price": 120},
+            ],
+        )
+        result = SearchQuery("products").text("").filter(brand="Nike", price__gte=50).execute()
+        assert len(result.hits) == 1
+        assert result.hits[0]["name"] == "A"
+
+    def test_postgres_backend_receives_native_dict_not_expression_list(self):
+        """Regression: PostgresBackend.search() only recognises dict/str for
+        `filter`; a list silently matched neither branch and dropped the
+        filter entirely, returning unfiltered results with no error at all.
+
+        This test does not require a live PostgreSQL connection: it asserts
+        on the params dict the query builder hands to search(), which is
+        exactly what made the silent-drop bug possible.
+        """
+        params = SearchQuery("products").filter(brand="Nike")._build_params()
+        assert isinstance(params["filter"], dict), (
+            "PostgresBackend.search() treats non-dict, non-str filters as "
+            "'no filter' and silently returns unfiltered results."
+        )
+
+
+class TestFilterMeilisearchTranslation:
+    """The Meilisearch backend must still translate .filter() correctly once
+    the query builder stopped pre-compiling to a Meilisearch expression list.
+    """
+
+    def _make_backend(self):
+        return MeilisearchBackend(url="http://localhost:7700", api_key="test-key")
+
+    def _mock_response(self, json_data=None):
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = json_data or {"hits": [], "query": "", "estimatedTotalHits": 0}
+        return response
+
+    def test_equality_and_range_filters_translated_in_request_body(self):
+        backend = self._make_backend()
+        backend._client.request = MagicMock(return_value=self._mock_response())
+
+        params = SearchQuery("products").filter(brand="Nike", price__gte=50)._build_params()
+        backend.search("products", "", **params)
+
+        call_kwargs = backend._client.request.call_args
+        body = call_kwargs[1]["json"]
+        assert body["filter"] == "brand = 'Nike' AND price >= 50"
+
+    def test_in_suffix_translated_to_meilisearch_in_clause(self):
+        backend = self._make_backend()
+        backend._client.request = MagicMock(return_value=self._mock_response())
+
+        params = SearchQuery("products").filter(category__in=["shoes", "boots"])._build_params()
+        backend.search("products", "", **params)
+
+        call_kwargs = backend._client.request.call_args
+        body = call_kwargs[1]["json"]
+        assert body["filter"] == "category IN ['shoes', 'boots']"
 
 
 # ---------------------------------------------------------------------------
