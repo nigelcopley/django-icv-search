@@ -96,10 +96,16 @@ class SearchQuery:
 
             .filter(brand="Nike")           # equality
             .filter(price__gte=50)          # greater-than-or-equal
+            .filter(price__lte=50)          # less-than-or-equal
+            .filter(price__gt=50)           # greater-than
+            .filter(price__lt=50)           # less-than
             .filter(category__in=["shoes"]) # membership
+            .filter(category=["shoes"])     # membership (equivalent, no suffix needed)
 
-        Lookup suffixes are translated to the engine filter expression format
-        when the query is executed.
+        Filters are stored in the Django-native dict form accepted by
+        :func:`~icv_search.services.search.search` and every configured
+        backend translates it to its own native filter syntax at execute
+        time (see :mod:`icv_search.backends.filters`).
 
         Args:
             **kwargs: Field lookups to filter by.
@@ -514,7 +520,7 @@ class SearchQuery:
         params: dict[str, Any] = {}
 
         if self._filters:
-            params["filter"] = _build_filter_expression(self._filters)
+            params["filter"] = _normalise_filters(self._filters)
 
         if self._sort:
             params["sort"] = list(self._sort)
@@ -646,56 +652,27 @@ class SearchQuery:
 # ------------------------------------------------------------------ helpers
 
 
-def _build_filter_expression(filters: dict[str, Any]) -> list[str]:
-    """Convert a kwargs-style filter dict to a list of engine filter strings.
+def _normalise_filters(filters: dict[str, Any]) -> dict[str, Any]:
+    """Convert ``SearchQuery.filter()`` kwargs to the Django-native filter dict
+    that :func:`~icv_search.services.search.search` and every backend accept.
 
-    Supports plain equality and Django-style lookup suffixes:
-
-    - ``field="value"`` → ``'field = "value"'``
-    - ``field__gte=50`` → ``"field >= 50"``
-    - ``field__lte=50`` → ``"field <= 50"``
-    - ``field__gt=50`` → ``"field > 50"``
-    - ``field__lt=50`` → ``"field < 50"``
-    - ``field__in=["a","b"]`` → ``'field IN ["a", "b"]'``
-    - ``field__ne="x"`` → ``'field != "x"'``
+    ``SearchQuery.filter()`` supports a ``field__in=[...]`` suffix as a
+    Django-idiomatic alias for the plain-list-value IN convention used by
+    :mod:`icv_search.backends.filters` (``{"field": [...]}``). This helper
+    strips that suffix so the resulting dict matches what backends expect.
+    Range suffixes (``__gte``, ``__lte``, ``__gt``, ``__lt``) already match
+    the neutral dict convention and are passed through unchanged.
 
     Args:
-        filters: Dict of field lookups.
+        filters: Raw kwargs dict accumulated by ``SearchQuery.filter()``.
 
     Returns:
-        List of filter expression strings suitable for passing to the engine.
+        A Django-native filter dict suitable for every backend's ``search()``.
     """
-    _OPERATOR_MAP = {
-        "gte": ">=",
-        "lte": "<=",
-        "gt": ">",
-        "lt": "<",
-        "ne": "!=",
-    }
-
-    expressions: list[str] = []
-
+    normalised: dict[str, Any] = {}
     for key, value in filters.items():
-        parts = key.rsplit("__", 1)
-        if len(parts) == 2 and parts[1] in _OPERATOR_MAP:
-            field, lookup = parts
-            op = _OPERATOR_MAP[lookup]
-            expressions.append(f"{field} {op} {_format_value(value)}")
-        elif len(parts) == 2 and parts[1] == "in":
-            field = parts[0]
-            formatted = "[" + ", ".join(_format_value(v) for v in value) + "]"
-            expressions.append(f"{field} IN {formatted}")
+        if key.endswith("__in"):
+            normalised[key[: -len("__in")]] = list(value)
         else:
-            expressions.append(f"{key} = {_format_value(value)}")
-
-    return expressions
-
-
-def _format_value(value: Any) -> str:
-    """Format a Python value as an engine filter token."""
-    if isinstance(value, str):
-        escaped = value.replace('"', '\\"')
-        return f'"{escaped}"'
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    return str(value)
+            normalised[key] = value
+    return normalised

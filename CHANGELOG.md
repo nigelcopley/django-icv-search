@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-07-12
+
+### Fixed
+
+- `SearchQuery.filter()` compiled to a Meilisearch-only filter expression
+  list (`_build_filter_expression()`) regardless of the configured backend.
+  `DummyBackend` raised `AttributeError` (its filter matcher calls
+  `.items()` on the value) and `PostgresBackend` silently ignored the
+  filter and returned unfiltered results (a list matched neither its
+  dict nor its string branch). Only `MeilisearchBackend` tolerated the
+  list because its HTTP API accepts either a filter string or an array
+  of clause strings. `SearchQuery.filter()` now stores filters in the
+  Django-native dict form that `search()` and every backend already
+  translate at execute time, matching the documented filter contract.
+  The `field__in=[...]` suffix is normalised to a bare list value (the
+  convention backends expect) before being handed to the backend.
+
 ## [1.2.0] - 2026-07-09
 
 ### Added
